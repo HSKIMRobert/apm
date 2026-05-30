@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Surface the `compilation.strategy: distributed` default in the
+  concepts ramp and `apm compile` reference so users understand why
+  `apm compile` may add `AGENTS.md` / `CLAUDE.md` files in
+  subdirectories driven by `applyTo:` scopes. Adds a new "Where
+  compiled context files land" section to the primitives-and-targets
+  page and a distributed-layout example in the compile reference.
+  Default behavior is unchanged. (closes #1447) -- by @tillig
+  
 ### Fixed
 
 - Linux standalone `apm` binaries no longer fail git shared-cache clones with shared-library symbol lookup errors caused by PyInstaller dynamic-library paths leaking into child processes. (closes #1534)
