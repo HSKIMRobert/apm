@@ -25,6 +25,7 @@ apm marketplace validate NAME
 apm marketplace init [--force] [--name N] [--owner O]
 apm marketplace migrate [--force | --dry-run]
 apm marketplace check [--offline]
+apm marketplace audit NAME [--strict] [-v]
 apm marketplace doctor
 apm marketplace outdated [--offline] [--include-prerelease]
 apm marketplace publish [--targets FILE] [--dry-run] [--no-pr] [...]
@@ -185,6 +186,27 @@ package entry resolves to a reachable git ref.
 | Flag | Description |
 |---|---|
 | `--offline` | Schema and cached-ref checks only; no network. |
+
+### `apm marketplace audit NAME`
+
+Run after adding or updating a marketplace, or in CI, to verify no
+plugin escapes marketplace pinning. Audit a registered marketplace for
+plugin dependencies that bypass marketplace pinning. The command fetches each plugin's `apm.yml` at
+its pinned ref and warns when `dependencies.apm` uses direct git
+URLs, repo shorthands, or `{ git: ... }` entries instead of
+`name@marketplace` refs.
+
+| Flag | Description |
+|---|---|
+| `--strict` | Exit 1 when bypass warnings or unverifiable plugins are found. |
+| `--verbose`, `-v` | Show clean plugins and skipped reasons. |
+
+For the top-level content/integrity scan, see [`apm audit`](../audit/).
+
+```bash
+apm marketplace audit my-marketplace
+apm marketplace audit my-marketplace --strict
+```
 
 ### `apm marketplace doctor`
 

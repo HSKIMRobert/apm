@@ -83,6 +83,8 @@ class MarketplaceGroup(click.Group):
         "init",
         "check",
         "outdated",
+        "audit",
+        "doctor",
         "publish",
         "package",
         "migrate",
@@ -111,6 +113,8 @@ class MarketplaceGroup(click.Group):
             for name in cmd_names:
                 cmd = self.get_command(ctx, name)
                 if cmd is None:
+                    continue
+                if getattr(cmd, "hidden", False):
                     continue
                 help_text = cmd.get_short_help_str(limit=150)
                 commands.append((name, help_text))
@@ -1506,6 +1510,7 @@ def search(expression, limit, verbose):
         sys.exit(1)
 
 
+from .audit import audit  # noqa: E402
 from .check import check  # noqa: E402
 from .doctor import doctor  # noqa: E402
 from .init import init  # noqa: E402
@@ -1546,6 +1551,7 @@ __all__ = [
     "SemVer",
     "TargetResult",
     "add",
+    "audit",
     "browse",
     "check",
     "detect_config_source",
