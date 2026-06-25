@@ -16,6 +16,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or end with `.` -- can host an APM governance policy repo for the first
   time. (by @sergio-sisternes-epam; closes #1813) (#1830)
 
+### Removed
+
+- **Breaking (security):** executable dependencies -- including MCP servers and
+  canvas extensions -- now require explicit, persistent approval via `apm approve`,
+  closing the gap where canvas extensions were trusted per-run. The
+  `--trust-canvas-extensions` flag is removed as a consequence; canvas extensions
+  are now governed by the `allowExecutables` gate like every other executable
+  surface. Add an `allowExecutables: {}` block to `apm.yml` and run
+  `apm approve <pkg>` to trust them. (by @sergio-sisternes-epam) (#1865)
+
+  ```diff
+  - apm install --trust-canvas-extensions   # before: per-run trust flag
+  + apm approve <pkg>                        # after: one-time, user-local approval
+  ```
+
+  CI / non-interactive pipelines that previously passed the flag should
+  instead pre-seed approvals before `apm install`, e.g.
+  `apm approve <pkg>` (writes `~/.apm/approvals.yml` directly, no prompt),
+  so the gate finds the package already trusted and never prompts.
+
 ### Fixed
 
 - `apm install <pkg>@<marketplace>` now preserves GitLab and other
@@ -36,6 +56,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `apm install -g --target codex` now honors `CODEX_HOME` for user-scope
   Codex MCP config writes, falling back to `~/.codex/config.toml` when unset.
   (closes #1861) (#1863)
+
+### Security
+
+- The `allowExecutables` default-deny gate now enforces `mcp` server writes and
+  `canvas` extensions in addition to `hooks` and `bin`, bringing all four executable
+  surfaces under one approval model. `apm approve` decisions are also stored
+  user-local in `~/.apm/approvals.yml` instead of the committed project `apm.yml`,
+  so cloning a repository no longer silently inherits another developer's executable
+  approvals. (by @sergio-sisternes-epam) (#1865)
 
 ## [0.21.0] - 2026-06-19
 
