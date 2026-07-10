@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fresh checkouts with declared consumer targets no longer remain
+  `apm audit --ci`-red for files those targets cannot restore: `apm install`
+  now removes stale `deployed_files` entries outside the legitimate target
+  set. The [OpenAPM v0.1 specification](docs/src/content/docs/specs/openapm-v0.1.md)
+  now defines the same fail-safe reconciliation contract. (by @edenfunf;
+  closes #2059) (#2114)
 - `apm install --target intellij` now configures JetBrains Copilot MCP support
   while routing package file primitives through the Copilot profile.
   (by @sergio-sisternes-epam; closes #1957) (#2041)
