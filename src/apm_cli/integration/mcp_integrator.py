@@ -16,14 +16,18 @@ import logging
 import re
 import shutil
 import warnings
+from collections.abc import MutableMapping
 from datetime import datetime, timezone
 from pathlib import Path
+
+import tomlkit
+from tomlkit.exceptions import TOMLKitError
 
 from apm_cli.core.null_logger import NullCommandLogger
 from apm_cli.deps.lockfile import LockFile, get_lockfile_path
 from apm_cli.integration._shared import deduplicate_deps, resolve_locked_apm_yml_paths
 from apm_cli.runtime.utils import find_runtime_binary
-from apm_cli.utils.atomic_io import write_text_lf
+from apm_cli.utils.atomic_io import atomic_write_text, write_text_lf
 from apm_cli.utils.console import (
     _get_console,  # noqa: F401 -- re-exported; mcp_integrator_install imports this via lazy import
     _rich_error,
@@ -124,15 +128,15 @@ def _clean_toml_mcp_config(
     if not config_path.exists():
         return 0
     try:
-        import toml as _toml
-
-        config = _toml.loads(config_path.read_text(encoding="utf-8"))
+        config = tomlkit.parse(config_path.read_text(encoding="utf-8"))
         servers = config.get("mcp_servers", {})
+        if not isinstance(servers, MutableMapping):
+            return 0
         removed = [n for n in stale_names if n in servers]
         for name in removed:
             del servers[name]
         if removed:
-            write_text_lf(config_path, _toml.dumps(config))
+            atomic_write_text(config_path, tomlkit.dumps(config), new_file_mode=0o600)
             for name in removed:
                 msg = f"Removed stale MCP server '{name}' from {label}"
                 if use_rich:
@@ -140,7 +144,7 @@ def _clean_toml_mcp_config(
                 elif logger is not None:
                     logger.progress(msg)
         return len(removed)
-    except Exception:
+    except (OSError, TOMLKitError, UnicodeDecodeError):
         _log.debug("Failed to clean stale MCP servers from %s", label, exc_info=True)
         return 0
 
