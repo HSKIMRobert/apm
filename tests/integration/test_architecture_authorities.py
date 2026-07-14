@@ -34,6 +34,47 @@ def test_policy_resolution_failure_outcomes_have_single_owner() -> None:
     assert "Approval fallback outcomes must use policy/outcome_routing.py" in guard
 
 
+def test_object_git_dependency_fields_have_single_owner() -> None:
+    """Fixture authoring must consume the product parser's field vocabulary."""
+    root = Path(__file__).parents[2]
+    object_fields = (root / "src/apm_cli/models/dependency/object_fields.py").read_text()
+    parser = (root / "src/apm_cli/models/dependency/reference.py").read_text()
+    fixture = (root / "tests/utils/local_package.py").read_text()
+    guard = (root / "scripts/lint-architecture-boundaries.sh").read_text()
+
+    assert "def reject_unknown_git_fields" in object_fields
+    assert "reject_unknown_git_fields(entry, parent=True)" in parser
+    assert "reject_unknown_git_fields(entry, parent=False)" in parser
+    assert "reject_unknown_fields" not in fixture
+    assert "_GIT_DEPENDENCY_FIELDS" not in fixture
+    assert "Object-form Git dependency fields must come from the product parser" in guard
+
+
+def test_cleanup_current_claim_protection_has_single_owner() -> None:
+    """Cleanup must route current deployed-file claims through the reconciler."""
+    root = Path(__file__).parents[2]
+    owner = (root / "src/apm_cli/core/deployment_state.py").read_text()
+    guard = (root / "scripts/lint-architecture-boundaries.sh").read_text()
+    checker = _load_cleanup_claim_owner_checker(root)
+
+    assert "def current_claimed_paths" in owner
+    assert checker.analyze_path(root / "src/apm_cli/install/phases/cleanup.py") == []
+    assert "scripts/check_cleanup_claim_owner.py" in guard
+    assert "Cleanup current-claim protection must use DeploymentReconciler" in guard
+
+
+def _load_cleanup_claim_owner_checker(root: Path) -> ModuleType:
+    """Import the semantic cleanup claim-authority checker."""
+    module_name = "check_cleanup_claim_owner"
+    script_path = root / "scripts" / f"{module_name}.py"
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def _load_skill_subset_owner_checker() -> ModuleType:
     """Import scripts/check_skill_subset_owner.py as a standalone module.
 

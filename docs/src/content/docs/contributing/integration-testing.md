@@ -77,6 +77,77 @@ uv run pytest tests/integration/test_golden_scenario_e2e.py -v
 uv run pytest tests/integration -m requires_github_token -v
 ```
 
+### Hermetic lifecycle fixtures
+
+`tests/integration/test_hermetic_lifecycle_foundation.py` is the cross-module
+contract. Complete the [development setup](../development-guide/) first.
+
+| Utility | Owns | Contract test |
+| --- | --- | --- |
+| `isolated_apm_environment.py` | Child roots, environment, Python socket tripwire | `test_isolated_apm_environment_contract.py` |
+| `local_git_repository.py` | Deterministic local Git origins | `test_local_git_repository_factory_contract.py` |
+| `local_package.py` | Source-only package inputs | `test_local_package_factory_contract.py` |
+| `apm_lifecycle_runner.py` | Bounded process execution and evidence | `test_apm_lifecycle_runner_contract.py` |
+| `artifact_snapshot.py` | Read-only filesystem observations | `test_artifact_snapshot_contract.py` |
+| `scenario_rows.py` | Immutable scenario data | `test_scenario_rows_contract.py` |
+
+Source fixtures author only source inputs; the real APM CLI creates lockfiles,
+deployed trees, compiled output, bundles, hashes, cache state, and audit
+reports.
+
+`IsolatedApmEnvironment` builds deterministic child environments for APM and
+its Git/GitHub/ADO/GitLab/SSH flows, then installs a best-effort Python socket
+tripwire. The environment contract is deliberately bounded: it isolates the
+APM, Git, GH, Azure, home, cache, and temporary roots used by these tests. It
+does not scan arbitrary variables or act as a general credential scrubber.
+
+It is also not an OS/native-code sandbox: executables found through `PATH`
+remain trusted, reflective access to CPython internals or native extensions can
+bypass Python monkey-patches, `file://` access is not confined by the OS, and
+hostile post-creation filesystem races are outside the contract.
+`GIT_ALLOW_PROTOCOL=file` and local `url.*.insteadOf` rewriting separately
+restrict Git transport in reviewed scenarios.
+
+Keep modules flat. Inside a pytest test with `tmp_path`, compose them directly:
+
+```python
+import os
+
+from tests.utils.apm_lifecycle_runner import ApmLifecycleRunner
+from tests.utils.artifact_snapshot import ArtifactSnapshot
+from tests.utils.isolated_apm_environment import IsolatedApmEnvironment
+from tests.utils.local_package import LocalPackageFactory
+
+isolated = IsolatedApmEnvironment.create(tmp_path / "scenario", base_env=os.environ)
+environment = isolated.subprocess_env()
+sources = LocalPackageFactory(isolated.package_root)
+project = sources.create("consumer", targets=("copilot",))
+sources.add_skill(
+    project,
+    "example",
+    "---\nname: example\ndescription: Fixture\n---\n# Example\n",
+)
+result = ApmLifecycleRunner().run(
+    ("install", "--target", "copilot"),
+    cwd=project.root,
+    env=environment,
+)
+snapshot = ArtifactSnapshot.capture(project.root)
+assert result.returncode == 0
+assert "apm.lock.yaml" in snapshot.paths
+```
+
+For remote-package scenarios, add `LocalGitRepositoryFactory` and `ScenarioRow`
+as shown in the cross-module contract. `ApmLifecycleRunner()` invokes `apm`
+through `PATH`; packaged-binary tests use the
+[binary-resolution fixture](#apm-binary-resolution).
+
+```bash
+uv run pytest tests/integration/test_local_package_factory_contract.py -v
+uv run pytest tests/integration/test_hermetic_lifecycle_foundation.py -v
+uv run pytest -n auto tests/integration/test_hermetic_lifecycle_foundation.py -v
+```
+
 ### Apm binary resolution
 
 Tests that need to shell out to a real `apm` binary use the
