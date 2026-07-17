@@ -250,6 +250,43 @@ def test_local_bundle_policy_uses_shared_preflight_owner() -> None:
     assert "require_hashes enforcement must route through install/integrity.py" in guard
 
 
+def test_hook_file_routing_dep_targets_gate_has_static_guard() -> None:
+    """Per-file hook routing must compose with dependency target filtering."""
+    root = Path(__file__).parents[2]
+    guard = (root / "scripts/lint-architecture-boundaries.sh").read_text(encoding="utf-8")
+
+    assert "Per-file hook routing must not be gated by dep_targets_active" in guard
+    assert "scripts/check_hook_file_routing_owner.py" in guard
+
+
+def test_hook_file_routing_guard_rejects_dep_targets_gate(tmp_path: Path) -> None:
+    """AC6 must reject restoring the dependency-target bypass."""
+    root = Path(__file__).parents[2]
+    hook_integrator = tmp_path / "hook_integrator.py"
+    hook_integrator.write_text(
+        (root / "src/apm_cli/integration/hook_integrator.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    with hook_integrator.open("a", encoding="utf-8") as handle:
+        handle.write(
+            "\n\ndef _architecture_test_dep_target_gate() -> None:\n"
+            "    if dep_targets_active is False:\n"
+            "        _filter_hook_files_for_target([])\n"
+        )
+
+    result = subprocess.run(
+        (sys.executable, "scripts/check_hook_file_routing_owner.py", str(hook_integrator)),
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert result.returncode == 1
+    assert "dep_targets_active gates _filter_hook_files_for_target" in result.stdout
+
+
 def test_local_bundle_owner_guard_rejects_parallel_marker_interpretation(
     tmp_path: Path,
 ) -> None:

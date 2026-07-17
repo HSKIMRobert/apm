@@ -1138,7 +1138,6 @@ class HookIntegrator(BaseIntegrator):
         diagnostics=None,
         target=None,
         user_scope: bool = False,
-        dep_targets_active: bool = False,
     ) -> HookIntegrationResult:
         """Integrate hooks from a package into hooks dir (Copilot target).
 
@@ -1153,21 +1152,25 @@ class HookIntegrator(BaseIntegrator):
             target: Optional TargetProfile for scope-resolved root_dir
             user_scope: If True, rewrite hook script commands to absolute paths
                 so global hooks resolve from any working directory
-            dep_targets_active: If True, hook files were already target-filtered
 
         Returns:
             HookIntegrationResult: Results of the integration operation
         """
         hook_files = self.find_hook_files(package_info.install_path)
         package_name = self._get_package_name(package_info, project_root)
-        if not dep_targets_active:
-            hook_files = _filter_hook_files_for_target(
-                hook_files,
-                "copilot",
-                package_name=package_name,
-                warned_packages=self._deprecated_hook_routing_warnings,
-                package_identity=package_info.get_canonical_dependency_string(),
-            )
+        # Per-file target routing always runs.  A dep-level ``targets:`` list
+        # restricts WHICH targets are active (upstream in services.py); it must
+        # not disable per-file routing here, or divergent per-target files
+        # (e.g. ``pkg-claude-hooks.json`` vs ``pkg-codex-hooks.json``) would all
+        # merge into every active target -- cross-contaminating configs and
+        # duplicating shared entries (microsoft/apm#2020 regression class).
+        hook_files = _filter_hook_files_for_target(
+            hook_files,
+            "copilot",
+            package_name=package_name,
+            warned_packages=self._deprecated_hook_routing_warnings,
+            package_identity=package_info.get_canonical_dependency_string(),
+        )
 
         if not hook_files:
             return HookIntegrationResult(
@@ -1340,7 +1343,6 @@ class HookIntegrator(BaseIntegrator):
         diagnostics=None,
         target=None,
         user_scope: bool = False,
-        dep_targets_active: bool = False,
     ) -> HookIntegrationResult:
         """Integrate hooks by merging into a target-specific JSON config.
 
@@ -1367,14 +1369,16 @@ class HookIntegrator(BaseIntegrator):
 
         hook_files = self.find_hook_files(package_info.install_path)
         package_name = self._get_package_name(package_info, project_root)
-        if not dep_targets_active:
-            hook_files = _filter_hook_files_for_target(
-                hook_files,
-                config.target_key,
-                package_name=package_name,
-                warned_packages=self._deprecated_hook_routing_warnings,
-                package_identity=package_info.get_canonical_dependency_string(),
-            )
+        # Per-file target routing always runs; a dep-level ``targets:`` list
+        # narrows the active target set upstream but must not disable per-file
+        # routing (see integrate_package_hooks for the full rationale).
+        hook_files = _filter_hook_files_for_target(
+            hook_files,
+            config.target_key,
+            package_name=package_name,
+            warned_packages=self._deprecated_hook_routing_warnings,
+            package_identity=package_info.get_canonical_dependency_string(),
+        )
         if not hook_files:
             return _empty
 
@@ -1829,7 +1833,6 @@ class HookIntegrator(BaseIntegrator):
                 diagnostics=diagnostics,
                 target=target,
                 user_scope=user_scope,
-                dep_targets_active=dep_targets_active,
             )
 
         if target.name == "kiro":
@@ -1844,7 +1847,6 @@ class HookIntegrator(BaseIntegrator):
                 diagnostics=diagnostics,
                 target=target,
                 user_scope=user_scope,
-                dep_targets_active=dep_targets_active,
             )
 
         config = _MERGE_HOOK_TARGETS.get(target.name)
@@ -1858,7 +1860,6 @@ class HookIntegrator(BaseIntegrator):
                 diagnostics=diagnostics,
                 target=target,
                 user_scope=user_scope,
-                dep_targets_active=dep_targets_active,
             )
 
         return HookIntegrationResult(
