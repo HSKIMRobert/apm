@@ -7,140 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-07-31
+
+### Added
+
+- `apm.lock.yaml` can now record `materialization_repo_url` separately from
+  canonical dependency identity, preserving source casing in `apm_modules/` and
+  generated links while safely migrating stale case-only paths. Reported by
+  @rcollette. (#2409)
+
 ### Fixed
 
-- On-prem Azure DevOps Server hosts configured with `ADO_HOST` or
-  `APM_ADO_HOSTS` are no longer misclassified as GitHub Enterprise Server when
-  `GITHUB_HOST` overlaps, keeping ADO credentials isolated end to end.
-  The contract is pinned by `req-sc-013` in
-  `docs/src/content/docs/specs/openapm-v0.1.md`.
-  (by @sergio-sisternes-epam, #2365)
-- Package-declared targets now restrict dependency primitive deployment without expanding project or consumer authorization, preventing Claude-only hooks from leaking into Cursor and repairing stale owned entries on update; the contract is cited in `docs/src/content/docs/specs/openapm-v0.1.md`. By @sergio-sisternes-epam (#2362)
-- Saved targets from `apm config set target` now drive package, MCP, and LSP
-  phases in `apm install` and `apm update`; unresolved or failed required
-  service writes exit non-zero with a next step instead of silently succeeding.
-  (reported by @ryodocx, #2414, closes #2345)
-
-- Copilot hook packages with JavaScript scripts no longer fail with "hooks: hooks must be an object"; APM keeps generated `package.json` and nested JSON bundle assets out of project `.github/hooks/scripts/` and user `~/.copilot/hooks/scripts/`, where Copilot's recursive hook-loader scan would reject them as descriptors; use `.mjs` for ES module scripts targeting Copilot or VS Code. (#2322)
+- `apm self-update` now downloads GitHub and GHES installers from the selected
+  release tag and passes that same normalized version to the installer.
+  Configured installer mirrors remain authoritative. (by @fallintoplace, #2026)
+- `apm install --dry-run` no longer lists self-managed `includes: auto` files
+  as removals, matching the real install behavior. (by @mia106dev, #2069)
+- Repeated `apm install` runs now preserve unchanged MCP target mappings,
+  deployment ownership, and lockfile timestamps instead of rewriting
+  `apm.lock.yaml`. (#2306)
+- Declared `apm.yml` targets now determine MCP lockfile ownership before local
+  harness detection, so teammates no longer rewrite each other's target state.
+  Reported by @rrazvd. (#2307)
+- `apm lock` now defers disk deletion for dropped dependencies, preserving
+  deployed files until normal install reconciliation can remove them safely.
+  (by @atulya-singh, #2312)
+- `apm audit --ci` can now hydrate a cold cache from trusted lockfile pins
+  without mutating project state, closing false failures and false-green audit
+  results. (by @hugoguitton-lucca, #2329)
+- Consuming projects no longer inherit a dependency author's
+  `devDependencies.mcp`; direct and transitive runtime MCP dependencies still
+  propagate normally. (by @sergio-sisternes-epam, #2361)
+- Package-declared targets now restrict primitive deployment without expanding
+  project authorization, preventing target-specific hooks from leaking into
+  sibling harnesses and cleaning stale owned entries on update.
+  (by @sergio-sisternes-epam, #2362)
+- Copilot and VS Code hook deployment now excludes generated `package.json` and
+  nested JSON sidecars that recursive hook loaders could mistake for
+  descriptors. (by @sergio-sisternes-epam, #2363)
+- `apm update` and `apm update --force` now resolve mutable Git refs from the
+  authenticated remote even when the local bare-repository cache is stale;
+  normal installs retain cache reuse. (by @sergio-sisternes-epam, #2364)
+- Marketplace semver resolution now honors the producer's `tagPattern` instead
+  of assuming `{name}--v{version}`, while manifests without a pattern retain
+  the legacy convention. (by @sergio-sisternes-epam, #2366)
+- `apm audit` now reports deployed files that no lockfile entry claims as
+  `unrecorded` drift; shared hook merge targets remain exempt.
+  (by @salpers, #2380)
+- MCP Registry v0.1 `oci` packages now render Docker launchers and follow the
+  documented adapter package-selection order instead of falling through to
+  npm or PyPI launchers. (by @edenfunf, #2385)
+- VS Code container launchers now preserve MCP Registry v0.1 runtime arguments,
+  including collected bind mounts, instead of falling back to a bare Docker
+  command. (by @edenfunf, #2387)
+- MCP-only projects now create `apm.lock.yaml` during normal install and audit
+  cleanly on the first run; frozen install still fails without writing when
+  state is missing or stale. (by @edenfunf, #2390)
+- Copilot hooks now normalize lifecycle aliases to the documented
+  `sessionStart` and `agentStop` keys while preserving Claude's native event
+  names. Reported by @SaulMoro. (#2405)
+- Public `github.com` dependencies now try anonymous HTTPS before credential
+  resolution, avoiding repeated credential prompts while retaining private
+  repository fallback. Reported by @RuiRomano. (#2406)
+- Non-container npm, PyPI, and generic MCP launchers now preserve typed Registry
+  v0.1 arguments while retaining legacy `value_hint` compatibility. (#2407)
+- `apm install --target intellij` now writes MCP servers to the JetBrains
+  Copilot plugin-read path, migrating only APM-owned entries and preserving user
+  configuration. Reported by @xalvarez. (#2410)
 - `apm uninstall` now accepts the portable `_local/<name>` key printed by
-  `apm deps list` and rejects missing or ambiguous batches with a nonzero status
-  before APM writes. Reported by @sproott. (#2412, closes #2351)
-- Public `github.com` dependencies now try anonymous HTTPS before resolving
-  credentials, so all-public installs no longer open repeated credential or
-  Git Credential Manager prompts. Reported by @RuiRomano. (#2406, closes #2400)
-- `apm update` and `apm update --force` now resolve mutable Git refs from
-  the authenticated remote even when the local cache is stale; normal installs
-  retain lockfile and cache reuse. (by @sergio-sisternes-epam, closes #2342,
-  #2364)
-- `apm self-update` now downloads GitHub and GHES installer scripts from the
-  exact selected release tag and passes that same normalized version to the
-  installer, while configured installer mirrors remain authoritative. (by
-  @fallintoplace, #2026)
-- `apm audit` now reports a deployed file that no `apm.lock.yaml` entry claims
-  as `unrecorded` drift. Run `apm install` and commit the regenerated lockfile
-  to resolve new failures that `apm audit --ci` may surface on upgrade; shared
-  hook merge targets remain exempt. (by @salpers, #2380)
-- Run `apm install` and commit the regenerated lockfile to resolve new
-  `unrecorded` failures that `apm audit --ci` may surface on upgrade when
-  deployed files were committed without an `apm.lock.yaml` claim. This closes
-  a gap where `content-integrity` silently skipped such files; shared hook
-  merge targets remain exempt. (by @salpers, #2380)
-- A project whose `apm.yml` declares only `dependencies.mcp` now gets an
-  `apm.lock.yaml`. Such a project never entered the install pipeline that
-  writes one, so `apm audit` failed with "Lockfile missing -- run 'apm
-  install'" immediately after a successful install, and the resolved MCP
-  servers went unpinned. (by @edenfunf, #2373)
-- Projects that declare only MCP servers now install and audit cleanly on the
-  first try. Normal install creates `apm.lock.yaml` with the resolved MCP
-  state; frozen install fails without writing when that state is missing or
-  stale. The matching `openapm-v0.1.md` frozen-install requirement now covers
-  MCP state and all durable writes. (by @edenfunf, #2390; fixes #2373)
-- Package-declared targets now restrict dependency primitive deployment without expanding project or consumer authorization, preventing Claude-only hooks from leaking into Cursor and repairing stale owned entries on update; the contract is cited in `docs/src/content/docs/specs/openapm-v0.1.md`. By @sergio-sisternes-epam (#2362)
-- `apm install --target vscode` now preserves typed MCP Registry v0.1
-  arguments for non-container npm, PyPI, and generic launchers while keeping
-  one semantic package identity and legacy `value_hint` compatibility.
-  (by @edenfunf, closes #2388, #2407)
-
-- `apm install --target vscode` now launches container servers with their full
-  registry-supplied run options, including bind mounts whose values APM just
-  collected. VS Code previously read only the legacy `value_hint` spelling, so
-  MCP Registry v0.1 arguments were skipped and the launcher fell back to a bare
-  `run -i --rm <image>`. (by @edenfunf, #2377)
-
-
-- MCP servers whose registry entry uses the MCP Registry v0.1 container type
-  `oci` now render a `docker` launcher. They previously matched no launcher
-  branch and fell through to the generic `npx` default, which handed the
-  container image reference to npm as a package name. (by @edenfunf, #2376)
-
-### Changed
-
-- A server publishing both a container and a pypi package now resolves to the
-  container on Copilot, Codex, Gemini and the adapters inheriting them,
-  following the documented `npm, docker, pypi` selection order. Such a server
-  previously fell through to `uvx` and now requires a Docker daemon. VS Code
-  keeps its own `npm, pypi, docker` order. (by @edenfunf, #2376)
-- Consuming projects no longer inherit a dependency author's development-only
-  MCP servers. Only `dependencies.mcp` from direct and transitive packages
-  propagates; the root project's `dependencies.mcp` and `devDependencies.mcp`
-  remain active for its authoring environment.
-  (by @sergio-sisternes-epam, #2340)
-- `apm audit` now scans for hidden Unicode across every file under the deploy
-  trees the project's targets govern, instead of only the files
-  `apm.lock.yaml` records. Hash verification needs a recorded baseline and
-  stays lockfile-scoped, but a bidi override needs none -- so a deployed file
-  the lockfile omits (for example a target committed without the regenerated
-  lockfile) was exempt from scanning for as long as it stayed unrecorded, in
-  `--ci` and `--no-drift` runs alike. `apm audit --strip` cleans those files
-  too; `--package <name>` stays lockfile-scoped. (by @salpers, #2379)
-- Repeated `apm install` runs with unchanged self-defined MCP dependencies and
-  explicit target mappings now preserve `generated_at`, deployment ownership,
-  and `mcp_target_servers`, leaving `apm.lock.yaml` byte-identical instead of
-  rewriting it. (#2306)
-- Marketplace semver range resolution now honours the `tagPattern` declared by the producer; `version: "~2.1.0"` entries no longer silently fall back to the hardcoded `{name}--v{version}` tag pattern. Existing marketplace files without `tag_pattern` keep the legacy convention. Bare versions also fail closed when no tag matches; use an explicit tag ref instead. (#2366)
-- On-prem Azure DevOps Server hosts configured with `ADO_HOST` or
-  `APM_ADO_HOSTS` are no longer misclassified as GitHub Enterprise Server when
-  `GITHUB_HOST` overlaps, keeping ADO credentials isolated end to end.
-  The contract is pinned by `req-sc-013` in
-  `docs/src/content/docs/specs/openapm-v0.1.md`.
-  (by @sergio-sisternes-epam, #2365)
-- Package-declared targets now restrict dependency primitive deployment without expanding project or consumer authorization, preventing Claude-only hooks from leaking into Cursor and repairing stale owned entries on update; the contract is cited in `docs/src/content/docs/specs/openapm-v0.1.md`. By @sergio-sisternes-epam (#2362)
-- Copilot hooks now normalize session lifecycle aliases to documented `sessionStart` and `agentStop` keys while preserving Claude's `SessionStart` and `Stop` output (reported by @SaulMoro, closes #2337, #2405)
-- `apm install --target intellij` now writes JetBrains Copilot MCP servers to
-  the plugin-read config location, migrates only APM-owned entries from the
-  obsolete data path, and preserves user-authored entries in both files.
-  Reported by @xalvarez. (#2410, closes #2344)
-- JetBrains Copilot on Linux and macOS now sees MCP servers installed by
-  `apm install --target intellij`: APM writes the plugin-read config path,
-  migrates only APM-owned entries from the obsolete data path, and preserves
-  user-authored entries in both files. (closes #2344) (by @xalvarez, #2410)
+  `apm deps list` and rejects missing or ambiguous batches before writing.
+  Reported by @sproott. (#2412)
 - Saved targets from `apm config set target` now drive package, MCP, and LSP
-  phases in `apm install` and `apm update`; unresolved or failed required
-  service writes exit non-zero instead of skipping with success.
-  (by @ryodocx, closes #2345)
-
-- Mixed-case GitHub dependency paths now retain source casing in
-  `apm_modules/` and generated links while lockfile and deduplication identity
-  stays canonical; reinstall migrates stale case-only paths safely.
-  `docs/src/content/docs/specs/openapm-v0.1.md` now defines this split in
-  `req-lk-022`. Reported by @rcollette. (closes #2347, #2409)
-- `apm install --dry-run` no longer lists the project's own `includes: auto`
-  self-managed files under "Files that would be removed"; the orphan preview
-  now excludes the synthesized lockfile self-entry, matching the real install
-  which never removes them. (by @mia106dev, #2069)
-- Teammates with different harnesses installed no longer rewrite each other's
-  `mcp_target_servers`; lockfile ownership now follows declared `apm.yml`
-  `targets:` before local runtime detection. (by @rrazvd, closes #2298, #2307)
+  phases in `apm install` and `apm update`; failed required service writes exit
+  nonzero with a next step instead of silently succeeding. Reported by
+  @ryodocx. (#2414)
 
 ### Security
 
+- On-prem Azure DevOps Server hosts are no longer misclassified as GitHub
+  Enterprise Server when host settings overlap, keeping ADO credentials isolated
+  end to end. (by @sergio-sisternes-epam, #2365)
+- `apm audit` now scans every governed deploy-tree file for hidden Unicode,
+  including files omitted from `apm.lock.yaml`; `--package` remains
+  lockfile-scoped. (by @salpers, #2381)
 - Corporate git security settings -- SSL CA pins (`http.sslCAInfo`), bare-repo
-  protection (`safe.bareRepository=explicit`), and other inherited `GIT_CONFIG_*`
-  hardening -- are no longer silently dropped when apm injects an
-  `Authorization` header for a clone, download, or marketplace `ls-remote`.
-  The header overlay previously hardcoded `GIT_CONFIG_COUNT=1`, so merging it
-  onto an already-configured environment reset the count and clobbered index
-  0. (by @edenfunf, #2368)
+  protection, and inherited `GIT_CONFIG_*` hardening -- are now preserved when
+  APM injects authorization headers for Git operations.
+  (by @edenfunf, #2382)
 
 ## [0.26.0] - 2026-07-18
 
