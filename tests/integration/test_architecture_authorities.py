@@ -2306,7 +2306,7 @@ def test_git_auth_header_injection_has_single_owner() -> None:
 
 
 def test_dependency_identity_and_materialization_path_have_separate_owners() -> None:
-    """AC27 keeps canonical comparison casing out of filesystem path construction."""
+    """AC28 keeps canonical comparison casing out of filesystem path construction."""
     root = Path(__file__).parents[2]
     identity = (root / "src/apm_cli/models/dependency/identity.py").read_text(encoding="utf-8")
     materialization = (root / "src/apm_cli/models/dependency/materialization.py").read_text(
@@ -2330,7 +2330,7 @@ def test_dependency_identity_and_materialization_path_have_separate_owners() -> 
     owner_row = "| Dependency comparison identity vs display-cased materialization path |"
     assert owner_row in canonical_owners
     assert owner_row in owner_mirror
-    assert "AC27: dependency identity and materialization path authority" in guard
+    assert "AC28: dependency identity and materialization path authority" in guard
     assert (
         "Dependency identity may casefold only in identity.py; "
         "materialization must preserve source casing" in guard
@@ -2340,7 +2340,7 @@ def test_dependency_identity_and_materialization_path_have_separate_owners() -> 
 def test_dependency_materialization_owner_guard_rejects_canonical_path_reuse(
     tmp_path: Path,
 ) -> None:
-    """AC27 rejects routing the filesystem path back through lowercase identity."""
+    """AC28 rejects routing the filesystem path back through lowercase identity."""
     root = Path(__file__).parents[2]
     sandbox = tmp_path / "repo"
     shutil.copytree(
