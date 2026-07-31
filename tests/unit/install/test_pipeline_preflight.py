@@ -453,7 +453,5 @@ class TestRunInstallPipelineExceptionContracts:
         ):
             mock_lf_cls.read.return_value = None
             with pytest.raises(MaterializationPathCollisionError) as raised:
-            with pytest.raises(MaterializationPathCollisionError) as raised:
                 run_install_pipeline(pkg, target="claude")
-        assert raised.value is collision
         assert raised.value is collision
