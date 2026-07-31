@@ -1,9 +1,6 @@
 """Dependency resolution phase.
 
-Reads ``ctx.apm_package``, ``ctx.update_refs``, ``ctx.scope``, etc.;
-populates ``ctx.deps_to_install``, ``ctx.intended_dep_keys``,
-``ctx.dependency_graph``, ``ctx.existing_lockfile``, and several ancillary
-fields consumed by later phases (download, integrate, cleanup, lockfile).
+Loads inputs and populates resolution state consumed by later phases.
 
 This is the first phase of the install pipeline.  It covers:
 
@@ -30,11 +27,7 @@ from apm_cli.install.helpers.ref_reuse import (
 from apm_cli.install.helpers.ref_seed import seed_ref_resolver_from_lockfile
 from apm_cli.install.transaction import resolution_for_context
 from apm_cli.models.apm_package import GitReferenceType, ResolvedReference
-from apm_cli.models.dependency.materialization import (
-    CachedMaterializationPathReader,
-    MaterializationPathReader,
-    prepare_materialization_path,
-)
+from apm_cli.models.dependency import materialization as _materialization
 from apm_cli.utils.short_sha import format_short_sha
 
 if TYPE_CHECKING:
@@ -131,7 +124,7 @@ def _purge_cached_semver_paths_for_update(
 def _prepare_existing_materialization_paths(
     ctx: InstallContext,
     staging_session: ResolutionStagingSession,
-    materialization_reader: MaterializationPathReader,
+    materialization_reader: _materialization.MaterializationPathReader,
 ) -> None:
     """Migrate case-only legacy paths before resolver cache checks can bypass callbacks."""
     apm_modules_dir = getattr(ctx, "apm_modules_dir", None)
@@ -151,7 +144,7 @@ def _prepare_existing_materialization_paths(
 
     on_migrate = _materialization_migration_logger(getattr(ctx, "logger", None), apm_modules_dir)
     for dependency in dependencies:
-        prepare_materialization_path(
+        _materialization.prepare_materialization_path(
             dependency,
             apm_modules_dir,
             staging_session,
@@ -183,13 +176,13 @@ def _prepare_callback_materialization_path(
     dependency: Any,
     modules_dir: Path,
     staging_session: ResolutionStagingSession,
-    materialization_reader: MaterializationPathReader,
+    materialization_reader: _materialization.MaterializationPathReader,
     callback_lock: Any,
     logger: Any,
 ) -> Path:
     """Serialize transitive casing lookup and migration across resolver workers."""
     with callback_lock:
-        return prepare_materialization_path(
+        return _materialization.prepare_materialization_path(
             dependency,
             modules_dir,
             staging_session,
@@ -387,7 +380,7 @@ def _build_dependency_graph(ctx: InstallContext, resolver):
 def _resolve_dependencies(
     ctx: InstallContext,
     staging_session: ResolutionStagingSession,
-    materialization_reader: MaterializationPathReader,
+    materialization_reader: _materialization.MaterializationPathReader,
 ) -> None:
     """Resolve dependencies and populate the resolution fields on ``ctx``."""
     import threading as _threading
@@ -1014,19 +1007,11 @@ def run(ctx: InstallContext) -> None:
     _load_lockfile(ctx)
     _ensure_modules_dir(ctx)
     staging_session = resolution_for_context(ctx)
-    materialization_reader = CachedMaterializationPathReader()
-    _prepare_existing_materialization_paths(
-        ctx,
-        staging_session,
-        materialization_reader,
-    )
+    materialization_reader = _materialization.CachedMaterializationPathReader()
+    _prepare_existing_materialization_paths(ctx, staging_session, materialization_reader)
     _setup_downloader(ctx)
     seed_ref_resolver_from_lockfile(ctx)
-    _resolve_dependencies(
-        ctx,
-        staging_session,
-        materialization_reader,
-    )
+    _resolve_dependencies(ctx, staging_session, materialization_reader)
     _record_update_plan_complete_dep_keys(ctx)
     if ctx.only_packages:
         _apply_only_filter(ctx)
