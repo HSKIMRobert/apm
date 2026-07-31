@@ -808,7 +808,7 @@ unknown fields on round-trip. Field availability is **monotonic** in
 | Field                     | Notes                                                                           |
 |---------------------------|---------------------------------------------------------------------------------|
 | `repo_url`                | Canonical repo identity. REQUIRED for git-sourced entries. Cache isolation additionally follows [req-rs-016](#req-rs-016). |
-| `materialization_repo_url` | Optional source-cased repository identifier, with the same structure as `repo_url`, used to reconstruct materialization and generated-link paths. See [req-lk-022](#req-lk-022). |
+| `materialization_repo_url` | Optional source-cased repository identifier following the same host/owner/repo-path grammar as `repo_url`, used to reconstruct materialization and generated-link paths. See [req-lk-022](#req-lk-022). |
 | `host`                    | FQDN when not inferable from `repo_url`.                                        |
 | `port`                    | Non-standard port. Validated to `1..65535` on read.                             |
 | `registry_prefix`         | Path prefix when resolved via registry proxy.                                   |
@@ -923,6 +923,10 @@ the same package as `repo_url`; a mismatch MUST fail closed. It MUST
 NOT use `materialization_repo_url` as an identity, deduplication,
 cache, sort, or trust key, and its presence MUST NOT change
 `lockfile_version`.
+
+> **Note:** When `materialization_repo_url` is absent the consumer
+> derives materialization paths from `repo_url` directly;
+> absence is not an error.
 
 When reconstructing a dependency, materializing it under
 `apm_modules/`, or generating a relative link back to that
@@ -3410,7 +3414,7 @@ renumbering of conformance classes.
 | 0.1.20  | 2026-07-30 | Defensive amendment of [req-lk-006] (no new normative statement; count remains 104 (99 MUST, 5 SHOULD)): frozen validation now covers direct MCP server names and configurations as well as package pins, runs before lockfile, target-config, deployment, or cache mutation, and rejects manifest dependency mutation. |
 | 0.1.21  | 2026-07-31 | Spec-citation fold for package-declared target restrictions (closes #2321 Mode-B silent-extension gate). Added [req-tg-008] (Section 8.5.3, consumer MUST): a consumer MUST treat a package's declared `target:`/`targets:` field as a restriction-only filter on all target-scoped primitive integration; if the field resolves to a non-empty set that does not contain `all`, the consumer MUST NOT deliver that package's primitives to any active integration target not in the declared set; the filter composes by intersection with the consumer-side per-dependency `targets:` filter and can only narrow, never expand. Section 8.7, Section 11.3.2 Consumer enumeration, and Appendix C updated. Statement count: 104 -> 105 (100 MUST, 5 SHOULD). |
 | 0.1.22  | 2026-07-31 | Spec-citation fold for deterministic configured-host credential isolation (closes #2338). Added [req-sc-013] (Section 10.3, consumer MUST): a consumer selects one effective host class before credential resolution, applies documented deterministic precedence when configuration signals overlap, exposes only credentials belonging to the selected class to requests and child processes, and preserves an explicit non-default port in both transport and credential scope. Clarified [req-sc-005] so this configured override is not prohibited by its default host-class collapse rule. Section 1.3, Section 10.11, Section 11.3.2 Consumer enumeration, and Appendix C updated. Statement count: 105 -> 106 (101 MUST, 5 SHOULD). |
-| 0.1.23  | 2026-07-31 | Spec-citation fold for case-preserving dependency materialization (closes #2347). Added [req-lk-022] (Section 5.2, consumer MUST): a consumer that case-folds repository identity but retains different source spelling records `materialization_repo_url`, validates it maps to the same canonical identity, excludes it from identity/cache/sort/trust decisions, preserves exact virtual-path casing, and either transactionally migrates one stale case variant or fails closed without deleting colliding paths. Defined rollback semantics for case-only rename and preserved interrupted recovery state. Added the field to the lockfile schema and conformance fixture, plus migration and collision conformance oracles. Section 5.7, Section 10.11, Section 11.3.2, and Appendix C updated. Statement count: 106 -> 107 (102 MUST, 5 SHOULD). |
+| 0.1.23  | 2026-07-31 | Spec-citation fold for case-preserving dependency materialization (closes #2347). Added [req-lk-022] (Section 5.2, consumer MUST): a consumer that case-folds repository identity but retains different source spelling records `materialization_repo_url`, validates it maps to the same canonical identity, excludes it from identity/cache/sort/trust decisions, preserves exact virtual-path casing, and either transactionally migrates one stale case variant or fails closed without deleting colliding paths. Defined rollback semantics for case-only rename and preserved interrupted recovery state. Added the field to the lockfile schema and conformance fixture, plus migration and collision conformance oracles. Hardened lockfile schema: `repo_url` now carries `minLength: 1` to match the prose requirement that git-sourced entries provide a non-empty canonical identifier ([req-lk-003](#req-lk-003)). Section 5.7, Section 10.11, Section 11.3.2, and Appendix C updated. Statement count: 106 -> 107 (102 MUST, 5 SHOULD). |
 
 Errata (none at publication).
 
