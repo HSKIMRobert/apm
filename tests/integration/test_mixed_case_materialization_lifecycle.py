@@ -20,7 +20,6 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.e2e,
     pytest.mark.lifecycle_smoke,
-    pytest.mark.lifecycle_merge_group,
     pytest.mark.requires_apm_binary,
     pytest.mark.requires_e2e_mode,
 ]

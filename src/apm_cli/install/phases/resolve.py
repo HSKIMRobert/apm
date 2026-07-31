@@ -1,6 +1,9 @@
 """Dependency resolution phase.
 
-Loads inputs and populates resolution state consumed by later phases:
+Loads inputs and populates resolution state consumed by later phases.
+
+This is the first phase of the install pipeline.  It covers:
+
 1. Lockfile loading (``apm.lock.yaml``)
 2. ``apm_modules/`` directory creation
 3. Auth resolver defaulting + downloader construction
@@ -106,8 +109,6 @@ def _prepare_existing_materialization_paths(
     """Migrate case-only legacy paths before resolver cache checks can bypass callbacks."""
     apm_modules_dir = getattr(ctx, "apm_modules_dir", None)
     if apm_modules_dir is None:
-        return
-    if not any(materialization_reader.iterdir(apm_modules_dir)):
         return
     dependencies = list(getattr(ctx, "all_apm_deps", ()))
     seen_keys = {dependency.get_unique_key() for dependency in dependencies}
