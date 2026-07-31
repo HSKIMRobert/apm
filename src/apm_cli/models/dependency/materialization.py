@@ -337,7 +337,7 @@ def prepare_materialization_path(
         dependency=dependency,
         reader=reader,
     )
-    if existing is None or existing == desired:
+    if existing is None or existing.parts == desired.parts:
         return desired
     _relocate_case_components(
         existing,

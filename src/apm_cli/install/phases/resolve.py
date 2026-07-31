@@ -137,10 +137,14 @@ def _prepare_existing_materialization_paths(
     materialization_reader: MaterializationPathReader,
 ) -> None:
     """Migrate case-only legacy paths before resolver cache checks can bypass callbacks."""
-    dependencies = list(ctx.all_apm_deps)
+    apm_modules_dir = getattr(ctx, "apm_modules_dir", None)
+    if apm_modules_dir is None:
+        return
+    dependencies = list(getattr(ctx, "all_apm_deps", ()))
     seen_keys = {dependency.get_unique_key() for dependency in dependencies}
-    if ctx.existing_lockfile is not None:
-        for locked in ctx.existing_lockfile.get_package_dependencies():
+    existing_lockfile = getattr(ctx, "existing_lockfile", None)
+    if existing_lockfile is not None:
+        for locked in existing_lockfile.get_package_dependencies():
             dependency = locked.to_dependency_ref()
             key = dependency.get_unique_key()
             if key in seen_keys:
@@ -148,11 +152,14 @@ def _prepare_existing_materialization_paths(
             dependencies.append(dependency)
             seen_keys.add(key)
 
-    on_migrate = _materialization_migration_logger(ctx.logger, ctx.apm_modules_dir)
+    on_migrate = _materialization_migration_logger(
+        getattr(ctx, "logger", None),
+        apm_modules_dir,
+    )
     for dependency in dependencies:
         prepare_materialization_path(
             dependency,
-            ctx.apm_modules_dir,
+            apm_modules_dir,
             staging_session,
             reader=materialization_reader,
             on_migrate=on_migrate,

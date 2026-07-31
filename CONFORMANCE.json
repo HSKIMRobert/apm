@@ -291,6 +291,20 @@
       ]
     },
     {
+      "conformance_class": "consumer",
+      "id": "req-lk-022",
+      "keyword": "MUST",
+      "section": "5.2",
+      "status": "active",
+      "test_count": 4,
+      "tests": [
+        "tests/spec_conformance/test_lockfile_reqs.py::test_lockfile_materialization_spelling_is_non_identity_metadata",
+        "tests/spec_conformance/test_lockfile_reqs.py::test_materialization_spelling_collision_fails_without_deleting_candidates",
+        "tests/spec_conformance/test_lockfile_reqs.py::test_materialization_spelling_does_not_change_lockfile_sort_order",
+        "tests/spec_conformance/test_lockfile_reqs.py::test_materialization_spelling_migrates_one_case_variant_transactionally"
+      ]
+    },
+    {
       "conformance_class": "producer",
       "id": "req-mf-001",
       "keyword": "MUST",
@@ -1210,7 +1224,7 @@
   "spec_version": "v0.1.1",
   "summary_by_class": {
     "consumer": {
-      "active": 76,
+      "active": 77,
       "skipped": 1,
       "unbound": 0,
       "xfail": 0
@@ -1234,5 +1248,5 @@
       "xfail": 0
     }
   },
-  "total_requirements": 106
+  "total_requirements": 107
 }

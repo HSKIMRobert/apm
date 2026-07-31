@@ -41,7 +41,7 @@ class ResolutionStagingSession:
         ensure_path_within(source, self._modules_dir)
         ensure_path_within(destination, self._modules_dir)
         with self._lock:
-            if source == destination:
+            if source.parts == destination.parts:
                 return
             if source.is_symlink():
                 raise ValueError(
@@ -105,7 +105,8 @@ class ResolutionStagingSession:
         """Rename an entry through a sibling so case-insensitive filesystems update spelling."""
         try:
             source.replace(destination)
-            return
+            if any(child.name == destination.name for child in destination.parent.iterdir()):
+                return
         except OSError:
             if not source.exists() and destination.exists():
                 return

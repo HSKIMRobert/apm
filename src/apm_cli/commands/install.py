@@ -413,7 +413,6 @@ def _resolve_package_references(
             )
             canonical = dep_ref.to_canonical()
             identity = dep_ref.get_identity()
-            _apm_yml_entries.setdefault(canonical, dep_ref.to_apm_yml_entry())
             apply_cli_skill_pin(
                 dep_ref,
                 skill_subset,
@@ -463,6 +462,7 @@ def _resolve_package_references(
         # plain canonical string without this).
         if skill_subset and canonical not in _apm_yml_entries:
             _apm_yml_entries[canonical] = dep_ref.to_apm_yml_entry()
+        _apm_yml_entries.setdefault(canonical, dep_ref.to_apm_yml_entry())
 
         # Check if package is already in dependencies (by identity)
         already_in_deps = identity in existing_identities
