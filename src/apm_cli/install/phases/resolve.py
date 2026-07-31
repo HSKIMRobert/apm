@@ -43,15 +43,7 @@ _logger = logging.getLogger(__name__)
 
 
 def _lockfile_has_registry_deps(existing_lockfile) -> bool:
-    """True when the on-disk lockfile records at least one registry-sourced dep.
-
-    Used to construct the registry resolver even when apm.yml's
-    ``registries:`` block has been removed but locked deps still need to
-    re-install. A user clones a repo, the apm.yml has no registries: block
-    but the lockfile says some deps are ``source: registry`` — we still
-    want them to install (they'll fail at auth lookup if the URL doesn't
-    match anything configured, with a clear remediation per §6.2).
-    """
+    """Return whether the lockfile contains a registry-sourced dependency."""
     if not existing_lockfile:
         return False
     return any(
@@ -77,21 +69,9 @@ def _purge_cached_semver_paths_for_update(
     logger,
     staging_session: ResolutionStagingSession,
 ) -> None:
-    """Pre-purge on-disk install paths for direct git-source and registry semver deps
-    when ``--update`` / ``--refresh`` is set.
+    """Clear direct semver install paths for update/refresh re-resolution.
 
-    Bug 1 fix (#1496): the BFS resolver short-circuits at
-    ``install_path.exists()`` and never invokes ``download_callback``,
-    which is where ``_maybe_resolve_git_semver`` lives. For git-source
-    semver direct deps we therefore pre-purge the install path so the
-    resolver is forced through the callback, re-runs ``git ls-remote``,
-    and rewrites the lockfile with the latest matching tag. Matches
-    npm / cargo / bundler: ``--update`` is the explicit re-resolve
-    trigger and must not be swallowed by the on-disk cache. Scoped to
-    direct deps -- a transitive dep's own range is covered separately by
-    ``APMDependencyResolver._should_force_recheck``. Local and proxy deps
-    are excluded (different resolver path). Registry semver deps are
-    included: their callback also gates on install_path.exists().
+    Transitives use resolver recheck; local and proxy dependencies are excluded.
     """
     from contextlib import suppress
 
@@ -144,6 +124,8 @@ def _prepare_existing_materialization_paths(
 
     on_migrate = _materialization_migration_logger(getattr(ctx, "logger", None), apm_modules_dir)
     for dependency in dependencies:
+        if dependency.is_marketplace:
+            continue
         _materialization.prepare_materialization_path(
             dependency,
             apm_modules_dir,
