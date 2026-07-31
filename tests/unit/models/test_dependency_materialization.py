@@ -218,11 +218,13 @@ def test_cached_reader_reuses_directory_listings(tmp_path: Path) -> None:
     reader = CachedMaterializationPathReader(delegate)
 
     for repo in ("RepoA", "RepoB"):
+        dependency = DependencyReference.parse(f"MixedOrg/{repo}")
         desired = modules / "MixedOrg" / repo
         assert (
             find_case_equivalent_materialization_path(
                 desired,
                 modules,
+                dependency=dependency,
                 reader=reader,
             )
             == desired
@@ -242,10 +244,57 @@ def test_case_variant_lookup_fails_closed_on_distinct_collisions(tmp_path: Path)
         PurePosixPath("MixedOrg/MixedRepo"),
         PurePosixPath("mixedorg/mixedrepo"),
     )
+    dependency = DependencyReference.parse("MixedOrg/MixedRepo")
 
     with pytest.raises(MaterializationPathCollisionError, match="multiple"):
         find_case_equivalent_materialization_path(
             desired,
             modules,
+            dependency=dependency,
             candidate_relatives=candidates,
         )
+
+
+def test_virtual_subpath_casing_remains_identity_significant(tmp_path: Path) -> None:
+    """Casefolding stops at the repository boundary for nested packages."""
+    modules = tmp_path / "apm_modules"
+    dependency = DependencyReference.parse_from_dict(
+        {
+            "git": "https://github.com/MixedOrg/MixedRepo.git",
+            "path": "Nested/Rules",
+        }
+    )
+    desired = dependency.get_install_path(modules)
+
+    assert (
+        find_case_equivalent_materialization_path(
+            desired,
+            modules,
+            dependency=dependency,
+            candidate_relatives=(PurePosixPath("mixedorg/mixedrepo/Nested/rules"),),
+        )
+        is None
+    )
+
+
+def test_virtual_file_leaf_casing_remains_identity_significant(tmp_path: Path) -> None:
+    """Flattened virtual-file names fold only their repository-name prefix."""
+    modules = tmp_path / "apm_modules"
+    dependency = DependencyReference.parse_from_dict(
+        {
+            "git": "https://github.com/MixedOrg/MixedRepo.git",
+            "path": "Prompts/Review.prompt.md",
+        }
+    )
+    desired = dependency.get_install_path(modules)
+    correct = PurePosixPath("mixedorg/mixedrepo-Review")
+
+    assert find_case_equivalent_materialization_path(
+        desired,
+        modules,
+        dependency=dependency,
+        candidate_relatives=(
+            PurePosixPath("mixedorg/mixedrepo-review"),
+            correct,
+        ),
+    ) == modules.joinpath(*correct.parts)

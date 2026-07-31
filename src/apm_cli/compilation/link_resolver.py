@@ -311,7 +311,7 @@ class UnifiedLinkResolver:
             return None
 
         # Calculate relative path from target location to actual source file
-        # Use os.path.relpath to support ../ for paths outside target directory
+        # The shared helper owns ../ handling and cross-drive refusal.
         try:
             return portable_link_relpath(actual_file, ctx.target_location)
         except Exception:
