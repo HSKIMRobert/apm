@@ -343,14 +343,12 @@ def test_noncontainer_launchers_converge_across_install_update_and_audit(
     install_env["MCP_REGISTRY_ALLOW_HTTP"] = "1"
     repeat_install = (
         "install",
-        "--runtime",
-        case.runtime,
         "--target",
-        "copilot",
+        case.runtime,
         "--trust-transitive-mcp",
         "--no-policy",
     )
-    update = ("update", "--yes", "--target", "copilot")
+    update = ("update", "--yes", "--target", case.runtime)
 
     with ExitStack() as stack:
         registries: list[LocalMcpRegistry] = [
@@ -374,10 +372,8 @@ def test_noncontainer_launchers_converge_across_install_update_and_audit(
         initial_install = (
             "install",
             str(source.root),
-            "--runtime",
-            case.runtime,
             "--target",
-            "copilot",
+            case.runtime,
             "--trust-transitive-mcp",
             "--no-policy",
         )
