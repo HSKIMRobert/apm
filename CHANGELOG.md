@@ -56,11 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stale. The matching `openapm-v0.1.md` frozen-install requirement now covers
   MCP state and all durable writes. (by @edenfunf, #2390; fixes #2373)
 - Package-declared targets now restrict dependency primitive deployment without expanding project or consumer authorization, preventing Claude-only hooks from leaking into Cursor and repairing stale owned entries on update; the contract is cited in `docs/src/content/docs/specs/openapm-v0.1.md`. By @sergio-sisternes-epam (#2362)
-- `apm install --target vscode` no longer drops a container server's
-  registry-supplied run options, including bind mounts whose values APM had
-  just prompted for. The VS Code argument reader recognised only the legacy
-  `value_hint` spelling, so every MCP Registry v0.1 argument was skipped and
-  the launcher fell back to a bare `run -i --rm <image>`. (by @edenfunf, #2377)
 - `apm install --target vscode` now preserves typed MCP Registry v0.1
   arguments for non-container npm, PyPI, and generic launchers while keeping
   one semantic package identity and legacy `value_hint` compatibility.
