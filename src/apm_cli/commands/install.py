@@ -423,10 +423,7 @@ def _resolve_package_references(
                 logger=logger,
             )
             if marketplace_dep_ref is not None or direct_virtual_resolved:
-                _apm_yml_entries.setdefault(
-                    canonical,
-                    dependency_reference_to_yaml_entry(dep_ref),
-                )
+                _apm_yml_entries.setdefault(canonical, dependency_reference_to_yaml_entry(dep_ref))
         except ValueError as e:
             reason = str(e)
             invalid_outcomes.append((package, reason))
