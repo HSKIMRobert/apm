@@ -96,12 +96,8 @@ class DependencyTree:
         self._nodes_by_unique_key.setdefault(unique_key, node)
         self._nodes_by_depth[node.depth].append(node)
         if node.dependency_ref.repo_url:
-            self._repo_lookup_index.update(
-                {
-                    node.dependency_ref.repo_url,
-                    node.dependency_ref.canonical_repo_url,
-                }
-            )
+            self._repo_lookup_index.add(node.dependency_ref.repo_url)
+            self._repo_lookup_index.add(node.dependency_ref.canonical_repo_url)
         self.max_depth = max(self.max_depth, node.depth)
 
     def get_node(self, unique_key: str) -> DependencyNode | None:

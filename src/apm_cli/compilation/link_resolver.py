@@ -312,10 +312,7 @@ class UnifiedLinkResolver:
 
         # Calculate relative path from target location to actual source file
         # The shared helper owns ../ handling and cross-drive refusal.
-        try:
-            return portable_link_relpath(actual_file, ctx.target_location)
-        except Exception:
-            return None
+        return portable_link_relpath(actual_file, ctx.target_location)
 
     def _resolve_to_actual_file(self, link_path: str, source_file: Path) -> Path | None:
         """Resolve a link path to the actual file on disk.

@@ -62,14 +62,13 @@ def normalize_package_repo_url(
     hosts retain their path casing because their repository semantics may be
     case-sensitive.
     """
-    if is_local or source == "local" or is_marketplace:
-        return repo_url
-
-    if source == "registry" or registry_prefix:
-        return repo_url.lower()
-
-    effective_host = host or default_host()
-    if is_github_hostname(effective_host):
+    if is_case_insensitive_package_identity(
+        host=host,
+        source=source,
+        registry_prefix=registry_prefix,
+        is_local=is_local,
+        is_marketplace=is_marketplace,
+    ):
         return repo_url.lower()
     return repo_url
 
@@ -87,11 +86,8 @@ def is_case_insensitive_package_identity(
         return False
     if source == "registry" or registry_prefix:
         return True
-    configured_default_host = default_host()
-    effective_host = host or configured_default_host
-    return effective_host.lower() == configured_default_host.lower() or is_github_hostname(
-        effective_host
-    )
+    effective_host = host or default_host()
+    return is_github_hostname(effective_host)
 
 
 def build_dependency_unique_key(
