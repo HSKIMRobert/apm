@@ -46,6 +46,7 @@ import time
 from functools import wraps
 from typing import TYPE_CHECKING
 
+from ..models.dependency.materialization import MaterializationPathCollisionError
 from ..models.results import InstallDisposition, InstallResult
 from ..utils.console import _rich_error
 from ..utils.diagnostics import DiagnosticCollector
@@ -985,9 +986,9 @@ def run_install_pipeline(  # noqa: C901, PLR0913, RUF100
         raise
     except InstallFailureAlreadyRendered:
         raise
-    except PathTraversalError:
-        # Path-safety violation in SKILL_BUNDLE or other nested
-        # resolution -- surface as-is for actionable user guidance.
+    except (PathTraversalError, MaterializationPathCollisionError):
+        # Path-safety and package-directory collision errors already include
+        # actionable guidance; preserve them instead of adding generic wrappers.
         raise
     except Exception as e:
         raise RuntimeError(f"Failed to resolve APM dependencies: {e}")  # noqa: B904

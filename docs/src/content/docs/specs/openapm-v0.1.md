@@ -136,7 +136,7 @@ between the companion corpus and the implementation.
 
 ### 1.3 Document conventions
 
-- OpenAPM v0.1 carries **106 normative statements** indexed in
+- OpenAPM v0.1 carries **107 normative statements** indexed in
   [Appendix C](#appendix-c-index-of-normative-statements).
 - All on-disk files defined by this specification are **YAML 1.2**
   parsed under the safe subset defined in
@@ -808,6 +808,7 @@ unknown fields on round-trip. Field availability is **monotonic** in
 | Field                     | Notes                                                                           |
 |---------------------------|---------------------------------------------------------------------------------|
 | `repo_url`                | Canonical repo identity. REQUIRED for git-sourced entries. Cache isolation additionally follows [req-rs-016](#req-rs-016). |
+| `materialization_repo_url` | Optional source-cased repository identifier following the same host/owner/repo-path grammar as `repo_url`, used to reconstruct materialization and generated-link paths. See [req-lk-022](#req-lk-022). |
 | `host`                    | FQDN when not inferable from `repo_url`.                                        |
 | `port`                    | Non-standard port. Validated to `1..65535` on read.                             |
 | `registry_prefix`         | Path prefix when resolved via registry proxy.                                   |
@@ -909,6 +910,45 @@ the recorded `resolved_hash` required by [req-lk-013](#req-lk-013).
 The presence of `name` or dependency-`apm.yml`-derived `version` is
 additive and MUST NOT change `lockfile_version` (both are valid in
 `"1"` and `"2"`).
+
+<a id="req-lk-022"></a>
+**[req-lk-022]** A conforming **consumer** implementation that
+case-folds any component of a repository identifier (authority or
+path) for identity comparison and retains a different source spelling
+MUST record that spelling in the optional
+`materialization_repo_url` field. The consumer MUST validate that
+`materialization_repo_url`, under the same host-specific repository
+normalization rule defined by [req-rs-016](#req-rs-016), identifies
+the same package as `repo_url`; a mismatch MUST fail closed. It MUST
+NOT use `materialization_repo_url` as an identity, deduplication,
+cache, sort, or trust key, and its presence MUST NOT change
+`lockfile_version`.
+
+> **Note:** When `materialization_repo_url` is absent the consumer
+> derives materialization paths from `repo_url` directly;
+> absence is not an error.
+
+When reconstructing a dependency, materializing it under
+`apm_modules/`, or generating a relative link back to that
+materialization, the consumer MUST prefer the retained source
+spelling. Case-folding applies only to repository-identity path
+components; an in-repository `virtual_path` and virtual-file leaf
+remain case-sensitive. If exactly one existing package path differs
+only in case-foldable repository components, the consumer MUST either
+migrate it transactionally to the retained spelling or fail without
+creating a duplicate. If multiple physical paths match one identity,
+the consumer MUST fail closed without deleting any candidate path.
+
+For this requirement, a transactional migration completes every
+case-only rename before the retained path is used, journals each
+completed rename, and restores the original spelling before returning
+from any caught failure. A consumer MAY use a temporary sibling path
+when its filesystem cannot apply a case-only rename directly; the
+temporary path MUST remain inside the materialization root and MUST
+NOT be treated as an installed package. This rollback contract does
+not claim process-crash atomicity; an interrupted temporary path is
+recovery state that a consumer MUST preserve for inspection rather
+than delete without verification.
 
 <a id="req-lk-020"></a>
 **[req-lk-020]** When an install that is not frozen under
@@ -1216,7 +1256,7 @@ This section's normative statements are:
   [req-lk-014](#req-lk-014), [req-lk-015](#req-lk-015),
   [req-lk-016](#req-lk-016), [req-lk-017](#req-lk-017),
   [req-lk-019](#req-lk-019), [req-lk-020](#req-lk-020),
-  [req-lk-021](#req-lk-021).
+  [req-lk-021](#req-lk-021), [req-lk-022](#req-lk-022).
 - Consumer (SHOULD): [req-lk-007](#req-lk-007),
   [req-lk-018](#req-lk-018).
 
@@ -2719,6 +2759,7 @@ every stored hash, foreclosing algorithm-ambiguity attacks.
 | 15| Cross-repository cache substitution                  | [req-rs-016](#req-rs-016)                                         | Consumer-default  |
 | 16| Silent capability-scope widening via lossy target conversion | [req-tg-006](#req-tg-006); default-visible conversion diagnostic | Consumer-default  |
 | 17| Cross-target primitive deployment                    | [req-tg-008](#req-tg-008), [req-lk-021](#req-lk-021)               | Consumer-default  |
+| 18| Case-collision materialization confusion             | [req-lk-022](#req-lk-022), [req-rs-016](#req-rs-016)               | Consumer-default  |
 
 ### 10.12 Publisher provenance and attestations (reserved for v0.2)
 
@@ -2881,7 +2922,7 @@ conformance statement identifying:
 [req-lk-015](#req-lk-015), [req-lk-016](#req-lk-016),
 [req-lk-017](#req-lk-017), [req-lk-018](#req-lk-018) (SHOULD),
 [req-lk-019](#req-lk-019), [req-lk-020](#req-lk-020),
-[req-lk-021](#req-lk-021),
+[req-lk-021](#req-lk-021), [req-lk-022](#req-lk-022),
 [req-rs-001](#req-rs-001), [req-rs-002](#req-rs-002),
 [req-rs-003](#req-rs-003), [req-rs-004](#req-rs-004),
 [req-rs-005](#req-rs-005), [req-rs-006](#req-rs-006),
@@ -3094,6 +3135,7 @@ tests/fixtures/spec-conformance/
     invalid-no-source-key.yml
     x-extension-roundtrip.yml
   lockfile/
+    materialization-sort-exclusion.yml
     v1-git-only.yml
     v2-with-registry.yml
     round-trip-unknown-fields.yml
@@ -3108,6 +3150,12 @@ Conformance-suite expansion (additional fixtures for archive
 path-traversal, merge-table cases, etc.) tracks here in subsequent
 revisions; the seed set above is the v0.1 minimum that
 implementations can run against immediately.
+
+The lockfile fixture `materialization-sort-exclusion.yml` exercises
+`materialization_repo_url` sort-exclusion while
+`v1-git-only.yml` exercises transactional spelling migration and
+collision refusal through the [req-lk-022](#req-lk-022) conformance
+oracles.
 
 ### 12.5 Round-trip conformance (normative)
 
@@ -3271,6 +3319,7 @@ renumbering of conformance classes.
 | [req-lk-019](#req-lk-019)                | MUST    | 5.2     | consumer    |
 | [req-lk-020](#req-lk-020)                | MUST    | 5.2     | consumer    |
 | [req-lk-021](#req-lk-021)                | MUST    | 5.2     | consumer    |
+| [req-lk-022](#req-lk-022)                | MUST    | 5.2     | consumer    |
 | [req-pl-001](#req-pl-001)                | MUST    | 6.1     | governance  |
 | [req-pl-002](#req-pl-002)                | MUST    | 6.2     | governance  |
 | [req-pl-003](#req-pl-003)                | MUST    | 6.4     | governance  |
@@ -3333,7 +3382,7 @@ renumbering of conformance classes.
 | [req-cf-001](#req-cf-001)                | MUST    | 12.5    | consumer    |
 | [req-cf-002](#req-cf-002)                | MUST    | 12.3    | consumer    |
 
-**Total normative statements: 106** (101 MUST, 5 SHOULD).
+**Total normative statements: 107** (102 MUST, 5 SHOULD).
 
 ---
 
@@ -3365,6 +3414,7 @@ renumbering of conformance classes.
 | 0.1.20  | 2026-07-30 | Defensive amendment of [req-lk-006] (no new normative statement; count remains 104 (99 MUST, 5 SHOULD)): frozen validation now covers direct MCP server names and configurations as well as package pins, runs before lockfile, target-config, deployment, or cache mutation, and rejects manifest dependency mutation. |
 | 0.1.21  | 2026-07-31 | Spec-citation fold for package-declared target restrictions (closes #2321 Mode-B silent-extension gate). Added [req-tg-008] (Section 8.5.3, consumer MUST): a consumer MUST treat a package's declared `target:`/`targets:` field as a restriction-only filter on all target-scoped primitive integration; if the field resolves to a non-empty set that does not contain `all`, the consumer MUST NOT deliver that package's primitives to any active integration target not in the declared set; the filter composes by intersection with the consumer-side per-dependency `targets:` filter and can only narrow, never expand. Section 8.7, Section 11.3.2 Consumer enumeration, and Appendix C updated. Statement count: 104 -> 105 (100 MUST, 5 SHOULD). |
 | 0.1.22  | 2026-07-31 | Spec-citation fold for deterministic configured-host credential isolation (closes #2338). Added [req-sc-013] (Section 10.3, consumer MUST): a consumer selects one effective host class before credential resolution, applies documented deterministic precedence when configuration signals overlap, exposes only credentials belonging to the selected class to requests and child processes, and preserves an explicit non-default port in both transport and credential scope. Clarified [req-sc-005] so this configured override is not prohibited by its default host-class collapse rule. Section 1.3, Section 10.11, Section 11.3.2 Consumer enumeration, and Appendix C updated. Statement count: 105 -> 106 (101 MUST, 5 SHOULD). |
+| 0.1.23  | 2026-07-31 | Spec-citation fold for case-preserving dependency materialization (closes #2347). Added [req-lk-022] (Section 5.2, consumer MUST): a consumer that case-folds repository identity but retains different source spelling records `materialization_repo_url`, validates it maps to the same canonical identity, excludes it from identity/cache/sort/trust decisions, preserves exact virtual-path casing, and either transactionally migrates one stale case variant or fails closed without deleting colliding paths. Defined rollback semantics for case-only rename and preserved interrupted recovery state. Added the field to the lockfile schema and conformance fixture, plus migration and collision conformance oracles. Hardened lockfile schema: `repo_url` now carries `minLength: 1` to match the prose requirement that git-sourced entries provide a non-empty canonical identifier ([req-lk-003](#req-lk-003)). Section 5.7, Section 10.11, Section 11.3.2, and Appendix C updated. Statement count: 106 -> 107 (102 MUST, 5 SHOULD). |
 
 Errata (none at publication).
 

@@ -1,11 +1,13 @@
 """Lockfile (apm.lock.yaml) conformance tests -- sec.5.
 
-Covers req-lk-001..021. The integrity sub-cluster (req-lk-012..017)
+Covers req-lk-001..022. The integrity sub-cluster (req-lk-012..017)
 now drives REAL fail-closed oracles against the committed binary
 fixture pair under `integrity/`.
 """
 
 from __future__ import annotations
+
+from pathlib import Path, PurePosixPath
 
 import jsonschema
 import pytest
@@ -23,6 +25,7 @@ from tests.spec_conformance._helpers import (
 V1 = ("lockfile", "v1-git-only.yml")
 V2 = ("lockfile", "v2-with-registry.yml")
 RT = ("lockfile", "round-trip-unknown-fields.yml")
+MATERIALIZATION_SORT = ("lockfile", "materialization-sort-exclusion.yml")
 
 TRUST_ARCHIVE = ("integrity", "security-baseline-2.3.1.tar.gz")
 TRUST_LOCKFILE = ("integrity", "security-baseline-2.3.1.frozen.yaml")
@@ -339,6 +342,101 @@ def test_lockfile_inventory_metadata_is_non_trust_anchor():
         "registry-resolved `version` MAY remain the exact\nregistry selection",
         "MUST NOT change `lockfile_version`",
     )
+
+
+@pytest.mark.req("req-lk-022")
+def test_lockfile_materialization_spelling_is_non_identity_metadata():
+    from apm_cli.deps.lockfile import LockedDependency
+
+    schema = load_schema("lockfile-v0.1.schema.json")
+    entry_props = schema["$defs"]["entry"]["properties"]
+    assert entry_props["materialization_repo_url"]["type"] == "string"
+    validate_against("lockfile-v0.1.schema.json", load_yaml_fixture(*V1))
+
+    dependency = LockedDependency(
+        repo_url="contoso/example",
+        host="github.com",
+        materialization_repo_url="Contoso/Example",
+    )
+    assert dependency.get_unique_key() == "contoso/example"
+    assert dependency.to_dependency_ref().repo_url == "Contoso/Example"
+
+    with pytest.raises(ValueError, match="does not identify the same package"):
+        LockedDependency(
+            repo_url="contoso/example",
+            host="github.com",
+            materialization_repo_url="other/example",
+        )
+
+    assert_spec_contains(
+        "**[req-lk-022]**",
+        "It MUST\nNOT use `materialization_repo_url` as an identity",
+        "an in-repository `virtual_path` and virtual-file leaf\nremain case-sensitive",
+        "MUST fail closed without deleting any candidate path",
+    )
+
+
+@pytest.mark.req("req-lk-022")
+def test_materialization_spelling_migrates_one_case_variant_transactionally(
+    tmp_path: Path,
+):
+    from apm_cli.install.resolution_staging import ResolutionStagingSession
+    from apm_cli.models.dependency import DependencyReference
+    from apm_cli.models.dependency.materialization import prepare_materialization_path
+
+    modules = tmp_path / "apm_modules"
+    stale = modules / "contoso" / "example"
+    stale.mkdir(parents=True)
+    (stale / "marker").write_text("owned", encoding="utf-8")
+    dependency = DependencyReference.parse("Contoso/Example")
+    staging = ResolutionStagingSession(modules)
+
+    selected = prepare_materialization_path(dependency, modules, staging)
+
+    assert selected == modules / "Contoso" / "Example"
+    assert (selected / "marker").read_text(encoding="utf-8") == "owned"
+    staging.rollback()
+    assert (stale / "marker").read_text(encoding="utf-8") == "owned"
+
+
+@pytest.mark.req("req-lk-022")
+def test_materialization_spelling_collision_fails_without_deleting_candidates(
+    tmp_path: Path,
+):
+    from apm_cli.models.dependency import DependencyReference
+    from apm_cli.models.dependency.materialization import (
+        MaterializationPathCollisionError,
+        find_case_equivalent_materialization_path,
+    )
+
+    modules = tmp_path / "apm_modules"
+    modules.mkdir()
+    dependency = DependencyReference.parse("Contoso/Example")
+    candidates = (
+        PurePosixPath("Contoso/Example"),
+        PurePosixPath("contoso/example"),
+    )
+
+    with pytest.raises(MaterializationPathCollisionError, match="multiple"):
+        find_case_equivalent_materialization_path(
+            dependency.get_install_path(modules),
+            modules,
+            dependency=dependency,
+            candidate_relatives=candidates,
+        )
+
+    assert list(modules.iterdir()) == []
+
+
+@pytest.mark.req("req-lk-022")
+def test_materialization_spelling_does_not_change_lockfile_sort_order():
+    document = load_yaml_fixture(*MATERIALIZATION_SORT)
+    dependencies = document["dependencies"]
+    canonical = [entry["repo_url"] for entry in dependencies]
+    display = [entry["materialization_repo_url"] for entry in dependencies]
+
+    assert canonical == sorted(canonical)
+    assert display != sorted(display)
 
 
 @pytest.mark.req("req-lk-020")

@@ -1469,7 +1469,6 @@ def test_target_instruction_contraction_uses_manifest_reconciliation() -> None:
     architecture = (root / ".apm/instructions/architecture.instructions.md").read_text(
         encoding="utf-8"
     )
-
     assert checker.analyze_paths(root) == []
     assert "AC15a: target-specific instruction contraction authority" in guard
     assert (
@@ -2303,6 +2302,84 @@ def test_git_auth_header_injection_has_single_owner() -> None:
     assert (
         "Git-subprocess Authorization-header injection must use "
         "set_authorization_header_git_env / set_ado_bearer_git_env" in guard
+    )
+
+
+def test_dependency_identity_and_materialization_path_have_separate_owners() -> None:
+    """AC29 keeps canonical comparison casing out of filesystem path construction."""
+    root = Path(__file__).parents[2]
+    identity = (root / "src/apm_cli/models/dependency/identity.py").read_text(encoding="utf-8")
+    materialization = (root / "src/apm_cli/models/dependency/materialization.py").read_text(
+        encoding="utf-8"
+    )
+    reference = (root / "src/apm_cli/models/dependency/reference.py").read_text(encoding="utf-8")
+    guard = (root / "scripts/lint-architecture-boundaries.sh").read_text(encoding="utf-8")
+    canonical_owners = (root / ".apm/instructions/architecture.instructions.md").read_text(
+        encoding="utf-8"
+    )
+    owner_mirror = (root / ".github/instructions/architecture.instructions.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "def build_dependency_unique_key(" in identity
+    assert "key = normalize_package_repo_url(" in identity
+    assert "def build_materialization_path(" in materialization
+    assert 'repo_parts = dependency.repo_url.split("/")' in materialization
+    assert "def prepare_materialization_path(" in materialization
+    assert "return build_materialization_path(self, apm_modules_dir)" in reference
+    owner_row = "| Dependency comparison identity vs display-cased materialization path |"
+    assert owner_row in canonical_owners
+    assert owner_row in owner_mirror
+    assert "AC29: dependency identity and materialization path authority" in guard
+    assert (
+        "Dependency identity may casefold only in identity.py; "
+        "materialization must preserve source casing" in guard
+    )
+
+
+def test_dependency_materialization_owner_guard_rejects_canonical_path_reuse(
+    tmp_path: Path,
+) -> None:
+    """AC29 rejects routing the filesystem path back through lowercase identity."""
+    root = Path(__file__).parents[2]
+    sandbox = tmp_path / "repo"
+    shutil.copytree(
+        root,
+        sandbox,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".venv",
+            ".pytest_cache",
+            "__pycache__",
+            "build",
+            "dist",
+            "node_modules",
+        ),
+    )
+    owner_path = sandbox / "src/apm_cli/models/dependency/materialization.py"
+    source = owner_path.read_text(encoding="utf-8")
+    owner_path.write_text(
+        source.replace(
+            'repo_parts = dependency.repo_url.split("/")',
+            'repo_parts = dependency.canonical_repo_url.split("/")',
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ("bash", "scripts/lint-architecture-boundaries.sh"),
+        cwd=sandbox,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert result.returncode == 1
+    assert (
+        "Dependency identity may casefold only in identity.py; "
+        "materialization must preserve source casing" in result.stdout
     )
 
 

@@ -310,6 +310,7 @@ def _resolve_package_references(
     _apm_yml_entries = {}  # canonical -> apm.yml entry (str or dict for HTTP deps)
     validated_packages = []
     dependencies_changed = False
+    manifest_identities = builtins.set(existing_identities)
 
     if logger:
         logger.validation_start(len(packages))
@@ -422,7 +423,7 @@ def _resolve_package_references(
                 logger=logger,
             )
             if marketplace_dep_ref is not None or direct_virtual_resolved:
-                _apm_yml_entries[canonical] = dependency_reference_to_yaml_entry(dep_ref)
+                _apm_yml_entries.setdefault(canonical, dependency_reference_to_yaml_entry(dep_ref))
         except ValueError as e:
             reason = str(e)
             invalid_outcomes.append((package, reason))
@@ -458,6 +459,7 @@ def _resolve_package_references(
         # plain canonical string without this).
         if skill_subset and canonical not in _apm_yml_entries:
             _apm_yml_entries[canonical] = dep_ref.to_apm_yml_entry()
+        _apm_yml_entries.setdefault(canonical, dep_ref.to_apm_yml_entry())
 
         # Check if package is already in dependencies (by identity)
         already_in_deps = identity in existing_identities
@@ -482,7 +484,7 @@ def _resolve_package_references(
         if package_accessible:
             updates_existing_entry = update_existing_dependency_entry_if_needed(
                 current_deps,
-                already_in_deps=already_in_deps,
+                already_in_deps=identity in manifest_identities,
                 apm_yml_entries=_apm_yml_entries,
                 canonical=canonical,
                 dep_ref=dep_ref,
