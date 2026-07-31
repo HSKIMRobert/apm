@@ -43,11 +43,22 @@ class ResolutionStagingSession:
         with self._lock:
             if source == destination:
                 return
-            if source.is_symlink() or not source.exists():
-                raise ValueError(f"Materialization migration source is invalid: {source}")
+            if source.is_symlink():
+                raise ValueError(
+                    f"Refusing to migrate symlinked package directory: {source}. "
+                    "Replace the symlink with the installed package and retry."
+                )
+            if not source.exists():
+                raise FileNotFoundError(
+                    f"Package directory disappeared before casing migration: {source}. "
+                    "Run 'apm install' again."
+                )
             if destination.exists():
                 if not os.path.samefile(source, destination):
-                    raise FileExistsError(f"Materialization migration target exists: {destination}")
+                    raise FileExistsError(
+                        f"Package directory already exists at {destination}. "
+                        "Inspect both case variants and remove the duplicate before retrying."
+                    )
                 self._replace_case_only(source, destination)
                 self._relocations.append((source, destination))
                 return
@@ -84,6 +95,7 @@ class ResolutionStagingSession:
 
     def _remove_empty_parents(self, path: Path) -> None:
         """Remove empty migration-created parents below ``apm_modules``."""
+        ensure_path_within(path, self._modules_dir)
         while path != self._modules_dir and path.exists() and not any(path.iterdir()):
             path.rmdir()
             path = path.parent
@@ -91,6 +103,12 @@ class ResolutionStagingSession:
     @staticmethod
     def _replace_case_only(source: Path, destination: Path) -> None:
         """Rename an entry through a sibling so case-insensitive filesystems update spelling."""
+        try:
+            source.replace(destination)
+            return
+        except OSError:
+            if not source.exists() and destination.exists():
+                return
         temporary = source.with_name(f".apm-case-migration-{uuid.uuid4().hex}")
         source.replace(temporary)
         try:

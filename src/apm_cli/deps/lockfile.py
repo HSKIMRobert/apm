@@ -259,7 +259,10 @@ class LockedDependency:
             registry_prefix=self.registry_prefix,
         )
         if materialization_identity != canonical_repo_url:
-            raise ValueError("materialization_repo_url must identify the same package as repo_url")
+            raise ValueError(
+                f"materialization_repo_url {materialization_repo_url!r} does not "
+                f"identify the same package as repo_url {self.repo_url!r}"
+            )
         self.repo_url = canonical_repo_url
         self.materialization_repo_url = (
             materialization_repo_url if materialization_repo_url != canonical_repo_url else None

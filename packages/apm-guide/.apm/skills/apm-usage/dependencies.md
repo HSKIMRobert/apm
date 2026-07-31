@@ -44,11 +44,13 @@ dependencies:
 ```
 
 GitHub and package-registry owner/repository identifiers are normalized to
-lowercase only for comparison, lock keys, and cache identity. `Owner/Repo` and
-`owner/repo` therefore identify one package, but materialization and generated
-relative links retain the declared spelling. Reinstall migrates stale
-APM-created case variants. Repository path casing remains identity-significant
-for unknown git hosts because a self-hosted backend may be case-sensitive.
+lowercase only for comparison, lock keys, and cache identity. The first
+declaration selects the repository display spelling retained in `apm.yml`,
+`apm_modules/`, and generated relative links. Reinstall migrates one stale
+APM-created case variant; multiple case-equivalent package directories stop
+install for manual inspection. Repository path casing remains
+identity-significant for unknown git hosts because a self-hosted backend may be
+case-sensitive.
 
 **Local-path anchor rule:** a `local_path` declared INSIDE another local
 package is resolved relative to THAT package's own directory (npm/pip/cargo

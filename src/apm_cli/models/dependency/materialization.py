@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import os
-from collections.abc import Iterable, Sequence
+import threading
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Protocol
 
@@ -34,6 +35,9 @@ class MaterializationPathReader(Protocol):
     def samefile(self, left: Path, right: Path) -> bool:
         """Return whether two spellings address the same entry."""
 
+    def invalidate(self, *paths: Path) -> None:
+        """Discard cached directory listings affected by a rename."""
+
 
 class _NativeMaterializationPathReader:
     def exists(self, path: Path) -> bool:
@@ -48,8 +52,45 @@ class _NativeMaterializationPathReader:
     def samefile(self, left: Path, right: Path) -> bool:
         return os.path.samefile(left, right)
 
+    def invalidate(self, *paths: Path) -> None:
+        return None
+
 
 _NATIVE_READER = _NativeMaterializationPathReader()
+
+
+class CachedMaterializationPathReader:
+    """Thread-safe directory-listing cache for one resolution attempt."""
+
+    def __init__(
+        self,
+        delegate: MaterializationPathReader = _NATIVE_READER,
+    ) -> None:
+        self._delegate = delegate
+        self._children: dict[Path, tuple[Path, ...]] = {}
+        self._lock = threading.RLock()
+
+    def exists(self, path: Path) -> bool:
+        return self._delegate.exists(path)
+
+    def is_dir(self, path: Path) -> bool:
+        return self._delegate.is_dir(path)
+
+    def iterdir(self, path: Path) -> Iterable[Path]:
+        key = path.absolute()
+        with self._lock:
+            if key not in self._children:
+                self._children[key] = tuple(self._delegate.iterdir(path))
+            return self._children[key]
+
+    def samefile(self, left: Path, right: Path) -> bool:
+        return self._delegate.samefile(left, right)
+
+    def invalidate(self, *paths: Path) -> None:
+        with self._lock:
+            for path in paths:
+                self._children.pop(path.absolute(), None)
+        self._delegate.invalidate(*paths)
 
 
 def build_materialization_path(
@@ -123,7 +164,7 @@ def _relative_parts(desired: Path, apm_modules_dir: Path) -> tuple[str, ...]:
         relative = desired.absolute().relative_to(apm_modules_dir.absolute())
     except ValueError as exc:
         raise MaterializationPathCollisionError(
-            f"Materialization path escapes apm_modules: {desired}"
+            f"Package directory escapes apm_modules/: {desired}"
         ) from exc
     return relative.parts
 
@@ -158,7 +199,9 @@ def find_case_equivalent_materialization_path(
         if len(matches) > 1:
             rendered = ", ".join(match.as_posix() for match in matches)
             raise MaterializationPathCollisionError(
-                f"Found multiple materialization paths for one package identity: {rendered}"
+                "Found multiple package directories for one dependency: "
+                f"{rendered}. Inspect the duplicates under apm_modules/, "
+                "keep the intended package, and run 'apm install' again."
             )
         return apm_modules_dir.joinpath(*matches[0].parts) if matches else None
 
@@ -177,7 +220,9 @@ def find_case_equivalent_materialization_path(
         if len(matches) > 1:
             rendered = ", ".join(str(match) for match in matches)
             raise MaterializationPathCollisionError(
-                f"Found multiple materialization paths for one package identity: {rendered}"
+                "Found multiple package directories for one dependency: "
+                f"{rendered}. Inspect the duplicates under apm_modules/, "
+                "keep the intended package, and run 'apm install' again."
             )
         if not matches:
             return None
@@ -203,9 +248,12 @@ def _relocate_case_components(
             if reader.exists(target):
                 if not reader.samefile(source, target):
                     raise MaterializationPathCollisionError(
-                        f"Materialization path collision between {source} and {target}"
+                        "Package directory casing collides between "
+                        f"{source} and {target}. Inspect both directories, "
+                        "keep the intended package, and run 'apm install' again."
                     )
             staging_session.relocate_path(source, target)
+            reader.invalidate(current_parent)
         current_parent = target
 
 
@@ -215,6 +263,7 @@ def prepare_materialization_path(
     staging_session: ResolutionStagingSession,
     *,
     reader: MaterializationPathReader = _NATIVE_READER,
+    on_migrate: Callable[[Path, Path], None] | None = None,
 ) -> Path:
     """Return the display-cased path, transactionally migrating stale casing."""
     desired = dependency.get_install_path(apm_modules_dir)
@@ -235,4 +284,6 @@ def prepare_materialization_path(
         staging_session,
         reader,
     )
+    if on_migrate is not None:
+        on_migrate(existing, desired)
     return desired

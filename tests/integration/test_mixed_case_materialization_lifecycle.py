@@ -241,7 +241,7 @@ def test_mixed_case_links_survive_install_update_audit_and_uninstall(
     _run(
         runner,
         consumer,
-        _INSTALL,
+        (*_INSTALL, "--verbose"),
         environment=child_env,
         scenario_id="mixed-case-repeat",
     )

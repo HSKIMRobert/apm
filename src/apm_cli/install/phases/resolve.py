@@ -20,8 +20,9 @@ from __future__ import annotations
 
 import builtins
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from apm_cli.install.helpers.ref_reuse import (
     annotate_update_plan_refs,
@@ -32,7 +33,11 @@ from apm_cli.install.helpers.ref_reuse import (
 from apm_cli.install.helpers.ref_seed import seed_ref_resolver_from_lockfile
 from apm_cli.install.transaction import resolution_for_context
 from apm_cli.models.apm_package import GitReferenceType, ResolvedReference
-from apm_cli.models.dependency.materialization import prepare_materialization_path
+from apm_cli.models.dependency.materialization import (
+    CachedMaterializationPathReader,
+    MaterializationPathReader,
+    prepare_materialization_path,
+)
 from apm_cli.utils.short_sha import format_short_sha
 
 if TYPE_CHECKING:
@@ -129,6 +134,7 @@ def _purge_cached_semver_paths_for_update(
 def _prepare_existing_materialization_paths(
     ctx: InstallContext,
     staging_session: ResolutionStagingSession,
+    materialization_reader: MaterializationPathReader,
 ) -> None:
     """Migrate case-only legacy paths before resolver cache checks can bypass callbacks."""
     dependencies = list(ctx.all_apm_deps)
@@ -142,11 +148,52 @@ def _prepare_existing_materialization_paths(
             dependencies.append(dependency)
             seen_keys.add(key)
 
+    on_migrate = _materialization_migration_logger(ctx.logger, ctx.apm_modules_dir)
     for dependency in dependencies:
         prepare_materialization_path(
             dependency,
             ctx.apm_modules_dir,
             staging_session,
+            reader=materialization_reader,
+            on_migrate=on_migrate,
+        )
+
+
+def _materialization_migration_logger(
+    logger,
+    apm_modules_dir: Path,
+) -> Callable[[Path, Path], None] | None:
+    """Build a verbose-only callback for case migration diagnostics."""
+    if logger is None:
+        return None
+    modules = apm_modules_dir.absolute()
+
+    def report(source: Path, destination: Path) -> None:
+        source_rel = source.absolute().relative_to(modules).as_posix()
+        destination_rel = destination.absolute().relative_to(modules).as_posix()
+        logger.verbose_detail(
+            f"    Migrated package directory casing: {source_rel} -> {destination_rel}"
+        )
+
+    return report
+
+
+def _prepare_callback_materialization_path(
+    dependency: Any,
+    modules_dir: Path,
+    staging_session: ResolutionStagingSession,
+    materialization_reader: MaterializationPathReader,
+    callback_lock: Any,
+    logger: Any,
+) -> Path:
+    """Serialize transitive casing lookup and migration across resolver workers."""
+    with callback_lock:
+        return prepare_materialization_path(
+            dependency,
+            modules_dir,
+            staging_session,
+            reader=materialization_reader,
+            on_migrate=_materialization_migration_logger(logger, modules_dir),
         )
 
 
@@ -336,7 +383,11 @@ def _build_dependency_graph(ctx: InstallContext, resolver):
     return dependency_graph
 
 
-def _resolve_dependencies(ctx: InstallContext, staging_session: ResolutionStagingSession) -> None:
+def _resolve_dependencies(
+    ctx: InstallContext,
+    staging_session: ResolutionStagingSession,
+    materialization_reader: MaterializationPathReader,
+) -> None:
     """Resolve dependencies and populate the resolution fields on ``ctx``."""
     import threading as _threading
 
@@ -437,10 +488,13 @@ def _resolve_dependencies(ctx: InstallContext, staging_session: ResolutionStagin
                 transitive ``../sibling`` resolves against the declaring
                 package's directory rather than the root consumer (#857).
         """
-        install_path = prepare_materialization_path(
+        install_path = _prepare_callback_materialization_path(
             dep_ref,
             modules_dir,
             staging_session,
+            materialization_reader,
+            callback_lock,
+            logger,
         )
         # Cache reuse stays behind the canonical ref-drift owner.
         if install_path.exists():
@@ -959,10 +1013,19 @@ def run(ctx: InstallContext) -> None:
     _load_lockfile(ctx)
     _ensure_modules_dir(ctx)
     staging_session = resolution_for_context(ctx)
-    _prepare_existing_materialization_paths(ctx, staging_session)
+    materialization_reader = CachedMaterializationPathReader()
+    _prepare_existing_materialization_paths(
+        ctx,
+        staging_session,
+        materialization_reader,
+    )
     _setup_downloader(ctx)
     seed_ref_resolver_from_lockfile(ctx)
-    _resolve_dependencies(ctx, staging_session)
+    _resolve_dependencies(
+        ctx,
+        staging_session,
+        materialization_reader,
+    )
     _record_update_plan_complete_dep_keys(ctx)
     if ctx.only_packages:
         _apply_only_filter(ctx)
