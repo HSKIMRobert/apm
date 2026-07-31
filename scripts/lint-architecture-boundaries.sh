@@ -1012,6 +1012,53 @@ if ! grep -q 'getattr(module, "pytestmark"' "$taxonomy_plugin" \
     violations=$((violations + 1))
 fi
 
+echo "[*] AC23: host-classification authority"
+identity_owner="src/apm_cli/models/dependency/identity.py"
+if ! grep -q 'if is_github_hostname(effective_host):' "$identity_owner" \
+    || grep -Eq 'effective_host.*==.*default_host|configured_default_host' "$identity_owner"; then
+    echo "[x] Package identity casing must route through is_github_hostname"
+    violations=$((violations + 1))
+fi
+
+echo "[*] AC24: ADO transport credential authority"
+ado_transport_direct_hits=$(
+    grep -En '(\._host|host)\.ado_token' \
+        src/apm_cli/deps/download_strategies.py \
+        src/apm_cli/deps/clone_engine.py \
+        src/apm_cli/deps/github_downloader_validation.py \
+        || true
+)
+if ! grep -q '_clear_platform_token_env(env)' src/apm_cli/core/auth.py \
+    || ! grep -q '"COPILOT_GITHUB_TOKEN"' src/apm_cli/core/auth.py \
+    || ! grep -q 'self.auth_resolver.git_env_for_context(' \
+        src/apm_cli/deps/github_downloader.py \
+    || ! grep -q 'downloader.auth_resolver.git_env_for_context(' \
+        src/apm_cli/deps/github_downloader_validation.py \
+    || ! grep -q 'probe_env = auth_resolver.git_env_for_context(' \
+        src/apm_cli/install/pipeline.py \
+    || grep -q 'if is_generic or is_azure_devops_hostname(host):' \
+        src/apm_cli/install/pipeline.py \
+    || ! grep -q 'hardened_git_env_for_context' \
+        src/apm_cli/install/helpers/ref_reuse.py \
+    || ! grep -q 'hardened_git_env_for_context' \
+        src/apm_cli/marketplace/client.py \
+    || ! grep -q 'hardened_git_env_for_context' \
+        src/apm_cli/marketplace/builder.py \
+    || ! grep -q 'ctx.token or ctx.host_info.kind == "ado"' \
+        src/apm_cli/marketplace/auth_helpers.py \
+    || ! grep -q 'hardened_git_env_for_context' \
+        src/apm_cli/commands/marketplace/check.py \
+    || ! grep -q 'auth_resolver.try_with_fallback(' \
+        src/apm_cli/policy/discovery.py \
+    || ! grep -q 'key = (host, dep.port, org)' \
+        src/apm_cli/install/pipeline.py \
+    || [ -n "$ado_transport_direct_hits" ]; then
+    echo "[x] ADO transport credentials must route through AuthResolver context"
+    [ -n "$ado_transport_direct_hits" ] && echo "$ado_transport_direct_hits"
+    violations=$((violations + 1))
+fi
+
+echo "[*] AC25: lifecycle smoke partition authority"
 lifecycle_topology_contract="tests/quality/test_ci_topology.py"
 lifecycle_membership_hits=$(
     grep -En \
@@ -1029,7 +1076,7 @@ if ! grep -q '^def _validated_lifecycle_node_set(' "$lifecycle_topology_contract
     violations=$((violations + 1))
 fi
 
-echo "[*] AC23: self-update release selection authority"
+echo "[*] AC26: self-update release selection authority"
 self_update_owner="src/apm_cli/commands/self_update.py"
 self_update_owner_defs=$(grep -Ec \
     '^class _ResolvedSelfUpdateRelease:|^def _resolve_self_update_release\(' \
@@ -1060,7 +1107,7 @@ if [ "$self_update_owner_defs" -ne 2 ] \
     violations=$((violations + 1))
 fi
 
-echo "[*] AC24: frozen install decision authority"
+echo "[*] AC27: frozen install decision authority"
 frozen_owner="src/apm_cli/install/service.py"
 frozen_adapter="src/apm_cli/commands/install.py"
 frozen_preflight_line=$(grep -n 'InstallService\.enforce_frozen(' "$frozen_adapter" \
@@ -1152,6 +1199,53 @@ if ! grep -q '_REGISTRY_TYPE_ALIASES = {"oci": "docker"}' "$mcp_container_owner"
     echo "[x] MCP container launcher decisions must route through MCPClientAdapter"
     violations=$((violations + 1))
 fi
+
+echo "[*] AC25: host-classification authority"
+identity_owner="src/apm_cli/models/dependency/identity.py"
+if ! grep -q 'if is_github_hostname(effective_host):' "$identity_owner" \
+    || grep -Eq 'effective_host.*==.*default_host|configured_default_host' "$identity_owner"; then
+    echo "[x] Package identity casing must route through is_github_hostname"
+    violations=$((violations + 1))
+fi
+
+echo "[*] AC26: ADO transport credential authority"
+ado_transport_direct_hits=$(
+    grep -En '(\._host|host)\.ado_token' \
+        src/apm_cli/deps/download_strategies.py \
+        src/apm_cli/deps/clone_engine.py \
+        src/apm_cli/deps/github_downloader_validation.py \
+        || true
+)
+if ! grep -q '_clear_platform_token_env(env)' src/apm_cli/core/auth.py \
+    || ! grep -q '"COPILOT_GITHUB_TOKEN"' src/apm_cli/core/auth.py \
+    || ! grep -q 'self.auth_resolver.git_env_for_context(' \
+        src/apm_cli/deps/github_downloader.py \
+    || ! grep -q 'downloader.auth_resolver.git_env_for_context(' \
+        src/apm_cli/deps/github_downloader_validation.py \
+    || ! grep -q 'probe_env = auth_resolver.git_env_for_context(' \
+        src/apm_cli/install/pipeline.py \
+    || grep -q 'if is_generic or is_azure_devops_hostname(host):' \
+        src/apm_cli/install/pipeline.py \
+    || ! grep -q 'hardened_git_env_for_context' \
+        src/apm_cli/install/helpers/ref_reuse.py \
+    || ! grep -q 'hardened_git_env_for_context' \
+        src/apm_cli/marketplace/client.py \
+    || ! grep -q 'hardened_git_env_for_context' \
+        src/apm_cli/marketplace/builder.py \
+    || ! grep -q 'ctx.token or ctx.host_info.kind == "ado"' \
+        src/apm_cli/marketplace/auth_helpers.py \
+    || ! grep -q 'hardened_git_env_for_context' \
+        src/apm_cli/commands/marketplace/check.py \
+    || ! grep -q 'auth_resolver.try_with_fallback(' \
+        src/apm_cli/policy/discovery.py \
+    || ! grep -q 'key = (host, dep.port, org)' \
+        src/apm_cli/install/pipeline.py \
+    || [ -n "$ado_transport_direct_hits" ]; then
+    echo "[x] ADO transport credentials must route through AuthResolver context"
+    [ -n "$ado_transport_direct_hits" ] && echo "$ado_transport_direct_hits"
+    violations=$((violations + 1))
+fi
+
 
 if [ "$violations" -gt 0 ]; then
     echo "[x] $violations architecture boundary rule(s) failed"
