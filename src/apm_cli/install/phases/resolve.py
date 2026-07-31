@@ -10,10 +10,7 @@ This is the first phase of the install pipeline.  It covers:
 1. Lockfile loading (``apm.lock.yaml``)
 2. ``apm_modules/`` directory creation
 3. Auth resolver defaulting + downloader construction
-4. Transitive dependency resolution via ``APMDependencyResolver``
-5. ``--only`` filtering (restrict to named packages + their subtrees)
-6. ``intended_dep_keys`` computation (the manifest-intent set used by
-   orphan cleanup in a later phase)
+4. Dependency resolution, ``--only`` filtering, and intended-key computation
 """
 
 from __future__ import annotations
@@ -152,10 +149,7 @@ def _prepare_existing_materialization_paths(
             dependencies.append(dependency)
             seen_keys.add(key)
 
-    on_migrate = _materialization_migration_logger(
-        getattr(ctx, "logger", None),
-        apm_modules_dir,
-    )
+    on_migrate = _materialization_migration_logger(getattr(ctx, "logger", None), apm_modules_dir)
     for dependency in dependencies:
         prepare_materialization_path(
             dependency,
