@@ -1469,7 +1469,6 @@ def test_target_instruction_contraction_uses_manifest_reconciliation() -> None:
     architecture = (root / ".apm/instructions/architecture.instructions.md").read_text(
         encoding="utf-8"
     )
-
     assert checker.analyze_paths(root) == []
     assert "AC15a: target-specific instruction contraction authority" in guard
     assert (
@@ -2315,6 +2314,12 @@ def test_dependency_identity_and_materialization_path_have_separate_owners() -> 
     )
     reference = (root / "src/apm_cli/models/dependency/reference.py").read_text(encoding="utf-8")
     guard = (root / "scripts/lint-architecture-boundaries.sh").read_text(encoding="utf-8")
+    canonical_owners = (root / ".apm/instructions/architecture.instructions.md").read_text(
+        encoding="utf-8"
+    )
+    owner_mirror = (root / ".github/instructions/architecture.instructions.md").read_text(
+        encoding="utf-8"
+    )
 
     assert "def build_dependency_unique_key(" in identity
     assert "key = normalize_package_repo_url(" in identity
@@ -2322,6 +2327,9 @@ def test_dependency_identity_and_materialization_path_have_separate_owners() -> 
     assert 'repo_parts = dependency.repo_url.split("/")' in materialization
     assert "def prepare_materialization_path(" in materialization
     assert "return build_materialization_path(self, apm_modules_dir)" in reference
+    owner_row = "| Dependency comparison identity vs display-cased materialization path |"
+    assert owner_row in canonical_owners
+    assert owner_row in owner_mirror
     assert "AC20: dependency identity and materialization path authority" in guard
     assert (
         "Dependency identity may casefold only in identity.py; "
