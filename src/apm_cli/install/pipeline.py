@@ -56,6 +56,7 @@ from .transaction import InstallTransaction
 if TYPE_CHECKING:
     from ..core.auth import AuthResolver
     from ..core.command_logger import InstallLogger
+    from ..core.target_detection import EffectiveTargetDecision
 
 
 # CRITICAL: Shadow Python builtins that share names with Click commands.
@@ -360,44 +361,6 @@ def _enforce_require_hashes(ctx) -> None:
         raise PolicyViolationError(str(exc)) from exc
 
 
-def _write_empty_lockfile_only(apm_dir: Path) -> None:
-    """Materialise an empty ``apm.lock.yaml`` for a depless ``apm lock`` run.
-
-    ``apm lock`` promises to always produce a lockfile, even when the
-    project declares zero dependencies (mirroring ``cargo
-    generate-lockfile``). The write is skipped when an equivalent
-    lockfile already exists so repeat runs don't churn ``generated_at``.
-    """
-    from ..deps.lockfile import LockFile, get_lockfile_path
-
-    lock_path = get_lockfile_path(apm_dir)
-    new_lock = LockFile.from_installed_packages([], None)
-    existing_lock = LockFile.read(lock_path) if lock_path.exists() else None
-    if not (existing_lock and new_lock.is_semantically_equivalent(existing_lock)):
-        new_lock.save(lock_path)
-
-
-def _is_no_work_install(
-    *,
-    all_apm_deps,
-    root_has_local_primitives: bool,
-    old_local_deployed,
-    has_orphan_deps: bool,
-    lockfile_only: bool,
-    apm_dir: Path | None,
-) -> bool:
-    """Return True when there is genuinely no install/cleanup work to do.
-
-    In ``lockfile_only`` mode (``apm lock``) an empty lockfile is written
-    before returning so the command always materialises its artefact.
-    """
-    if all_apm_deps or root_has_local_primitives or old_local_deployed or has_orphan_deps:
-        return False
-    if lockfile_only and apm_dir:
-        _write_empty_lockfile_only(apm_dir)
-    return True
-
-
 def _transactional_pipeline(run):
     """Supply a compatibility transaction and rollback every exceptional exit."""
 
@@ -439,7 +402,7 @@ def _transactional_pipeline(run):
 
 
 @_transactional_pipeline
-def run_install_pipeline(  # noqa: PLR0913, RUF100
+def run_install_pipeline(  # noqa: C901, PLR0913, RUF100
     apm_package: APMPackage,
     update_refs: bool = False,
     verbose: bool = False,
@@ -449,7 +412,8 @@ def run_install_pipeline(  # noqa: PLR0913, RUF100
     logger: InstallLogger = None,
     scope=None,
     auth_resolver: AuthResolver = None,
-    target: str = None,  # noqa: RUF013
+    target: str | list[str] | None = None,
+    target_decision: EffectiveTargetDecision | None = None,
     allow_insecure: bool = False,
     allow_insecure_hosts=(),
     marketplace_provenance: dict = None,
@@ -489,6 +453,7 @@ def run_install_pipeline(  # noqa: PLR0913, RUF100
         scope: InstallScope controlling project vs user deployment
         auth_resolver: Shared auth resolver for caching credentials
         target: Explicit target override from --target CLI flag
+        target_decision: Canonical effective target decision when already resolved
         allow_insecure: Whether direct HTTP dependencies are approved
         allow_insecure_hosts: Extra approved hosts for transitive HTTP dependencies
         marketplace_provenance: Marketplace provenance data for packages
@@ -548,7 +513,9 @@ def run_install_pipeline(  # noqa: PLR0913, RUF100
         _early_lockfile and any(k != _SELF_KEY for k in _early_lockfile.dependencies)
     )
 
-    if _is_no_work_install(
+    from .helpers.no_work import is_no_work_install
+
+    if is_no_work_install(
         all_apm_deps=all_apm_deps,
         root_has_local_primitives=_root_has_local_primitives,
         old_local_deployed=_old_local_deployed,
@@ -557,6 +524,21 @@ def run_install_pipeline(  # noqa: PLR0913, RUF100
         apm_dir=apm_dir,
     ):
         return InstallResult()
+
+    if target_decision is None:
+        from apm_cli.core.target_detection import resolve_effective_target_decision
+        from apm_cli.models.apm_package import package_target_selection
+
+        defer_auto_detection = lockfile_only or bool(
+            plan_callback is not None and logger is not None and logger.dry_run
+        )
+        target_decision = resolve_effective_target_decision(
+            project_root,
+            explicit_target=target,
+            manifest_target=package_target_selection(apm_package),
+            user_scope=scope is InstallScope.USER,
+            auto_detect=not defer_auto_detection,
+        )
 
     # ------------------------------------------------------------------
     # Build InstallContext from function args + computed state
@@ -576,7 +558,9 @@ def run_install_pipeline(  # noqa: PLR0913, RUF100
         logger=logger,
         scope=scope,
         auth_resolver=auth_resolver,
-        target_override=target,
+        target_override=target_decision.value,
+        target_decision=target_decision,
+        target_override_source=target_decision.source,
         allow_insecure=allow_insecure,
         allow_insecure_hosts=allow_insecure_hosts,
         marketplace_provenance=marketplace_provenance,
@@ -651,7 +635,23 @@ def run_install_pipeline(  # noqa: PLR0913, RUF100
         proceed = plan_callback(plan)
         if not proceed:
             transaction.rollback()
-            return InstallResult(disposition=InstallDisposition.CANCELLED)
+            return InstallResult(
+                disposition=InstallDisposition.CANCELLED,
+                target_decision=target_decision,
+            )
+
+    if target_decision.value is None and scope is InstallScope.PROJECT and not lockfile_only:
+        from apm_cli.core.target_detection import resolve_effective_target_decision
+        from apm_cli.models.apm_package import package_target_selection
+
+        target_decision = resolve_effective_target_decision(
+            project_root,
+            explicit_target=target,
+            manifest_target=package_target_selection(apm_package),
+        )
+        ctx.target_decision = target_decision
+        ctx.target_override = target_decision.value
+        ctx.target_override_source = target_decision.source
 
     ctx.tui.__enter__()
     try:

@@ -42,7 +42,8 @@ Flags
   (0 disables parallelism).
 * ``--target``/``-t`` -- agent harness(es) to deploy to; comma-separated
   for multiple targets. The generated command help lists every accepted
-  value. Overrides ``apm.yml targets:`` and auto-detection.
+  value. Overrides ``apm.yml targets:``, the saved config target, and
+  auto-detection.
 
 These flags make ``apm update`` a strict superset of the deprecated
 ``apm deps update`` (issue #1525). ``apm install --update`` remains the
@@ -78,6 +79,7 @@ from ..install.errors import (
     DirectDependencyError,
     FrozenInstallError,
     PolicyViolationError,
+    RequiredIntegrationError,
 )
 from ..install.plan import UpdatePlan, render_plan_text
 from ..utils.console import _rich_echo, _rich_error, _rich_info, _rich_success, _rich_warning
@@ -86,6 +88,7 @@ from ._helpers import UnknownPackageError, _find_apm_yml, resolve_requested_pack
 if TYPE_CHECKING:
     from ..core.command_logger import CommandLogger
     from ..core.scope import InstallScope
+    from ..core.target_detection import EffectiveTargetDecision
     from ..deps.lockfile import LockFile
     from ..models.dependency.reference import DependencyReference
 
@@ -220,7 +223,7 @@ def _run_mcp_lsp_integration(
     project_root: Path,
     existing_lock: LockFile | None,
     lock_path: Path,
-    target: str | list[str] | None,
+    target_decision: EffectiveTargetDecision | None,
     diagnostics: Any,
     logger: InstallLogger,
     verbose: bool,
@@ -242,6 +245,7 @@ def _run_mcp_lsp_integration(
 
     clear_apm_yml_cache()
     apm_package = APMPackage.from_apm_yml(Path("apm.yml"))
+    effective_target = target_decision.value if target_decision is not None else None
 
     old_mcp_servers: set = set()
     old_mcp_configs: dict = {}
@@ -278,11 +282,12 @@ def _run_mcp_lsp_integration(
             logger=logger,
             diagnostics=diagnostics,
             verbose=verbose,
-            explicit_target=target,
+            explicit_target=effective_target,
+            target_decision=target_decision,
             scope=scope,
         )
     except PolicyBlockError:
-        _rich_error(
+        logger.error(
             "MCP server(s) blocked by org policy. "
             "APM packages remain installed; MCP configs were NOT written."
         )
@@ -299,8 +304,68 @@ def _run_mcp_lsp_integration(
         should_install=True,
         logger=logger,
         diagnostics=diagnostics,
-        target_context=(mcp_apm_config, target, scope),
+        target_context=(mcp_apm_config, effective_target, scope),
+        target_decision=target_decision,
+        fail_on_write_error=True,
     )
+
+
+def _handle_service_only_update(
+    *,
+    apm_package: Any,
+    scope: InstallScope,
+    target: str | list[str] | None,
+    dry_run: bool,
+    logger: InstallLogger,
+    verbose: bool,
+) -> bool:
+    """Reconcile service-only manifests and return whether update is complete."""
+    if apm_package.has_any_apm_dependencies():
+        return False
+
+    from apm_cli.core.scope import InstallScope, get_apm_dir, get_deploy_root
+    from apm_cli.core.target_detection import resolve_package_target_decision
+    from apm_cli.deps.lockfile import LockFile, get_lockfile_path
+
+    apm_dir = get_apm_dir(scope)
+    lock_path = get_lockfile_path(apm_dir)
+    existing_lock = LockFile.read(lock_path)
+    has_services = bool(
+        apm_package.get_all_mcp_dependencies()
+        or apm_package.get_lsp_dependencies()
+        or (existing_lock and (existing_lock.mcp_servers or existing_lock.lsp_servers))
+    )
+    if not has_services:
+        logger.info("No APM dependencies declared in apm.yml -- nothing to update.")
+        return True
+    if dry_run:
+        logger.dry_run_notice("would reconcile MCP/LSP configuration; no files written")
+        return True
+
+    deploy_root = get_deploy_root(scope)
+    target_decision = resolve_package_target_decision(
+        deploy_root,
+        package=apm_package,
+        explicit_target=target,
+        user_scope=scope is InstallScope.USER,
+    )
+    try:
+        _run_mcp_lsp_integration(
+            scope=scope,
+            project_root=deploy_root,
+            existing_lock=existing_lock,
+            lock_path=lock_path,
+            target_decision=target_decision,
+            diagnostics=None,
+            logger=logger,
+            verbose=verbose,
+        )
+    except RequiredIntegrationError as exc:
+        logger.error(str(exc))
+        logger.render_summary()
+        sys.exit(1)
+    logger.success("MCP/LSP configuration reconciled. No APM dependencies to update.")
+    return True
 
 
 @click.command(
@@ -367,10 +432,10 @@ def _run_mcp_lsp_integration(
     type=TargetParamType(),
     default=None,
     help=(
-        f"Agent target(s) to update for. {target_help_fragment('update')} "
+        f"Agent target(s) to update for. {target_help_fragment('update')} "  # noqa: S608
         "Comma-separated for multiple: --target claude,cursor. "
         "Highest-priority entry in the resolution chain "
-        "(--target > apm.yml targets: > auto-detect)."
+        "(--target > apm.yml targets: > apm config set target ... > auto-detect)."
     ),
 )
 @click.pass_context
@@ -533,8 +598,15 @@ def _run_dep_update(
         _rich_error(f"Failed to parse apm.yml: {e}")
         sys.exit(1)
 
-    if not apm_package.has_apm_dependencies() and not apm_package.get_dev_apm_dependencies():
-        _rich_success("No APM dependencies declared in apm.yml -- nothing to update.")
+    logger = InstallLogger(verbose=verbose, dry_run=dry_run, partial=bool(packages))
+    if _handle_service_only_update(
+        apm_package=apm_package,
+        scope=scope,
+        target=target,
+        dry_run=dry_run,
+        logger=logger,
+        verbose=verbose,
+    ):
         return
 
     # Stage revision-pin rewrites on an owned package copy. The install
@@ -556,8 +628,6 @@ def _run_dep_update(
         _rich_error(f"Package '{e.token}' not found in apm.yml")
         _rich_info(f"Available: {', '.join(e.available)}", symbol="info")
         sys.exit(1)
-
-    logger = InstallLogger(verbose=verbose, dry_run=dry_run, partial=bool(packages))
 
     revision_pin_updates = _resolve_and_stage_revision_pin_updates(
         all_declared_deps=all_declared_deps,
@@ -719,13 +789,14 @@ def _run_dep_update(
     if plan is None or not isinstance(plan, UpdatePlan):
         return
 
+    target_decision = getattr(result, "target_decision", None)
     reconcile_noop = not dry_run and not plan.has_changes and not revision_pin_updates
     if plan_state.proceeded or reconcile_noop:
         from apm_cli.install.manifest_reconcile import reconcile_project_deployed_state
 
         reconcile_project_deployed_state(
             Path.cwd(),
-            explicit_target=target,
+            explicit_target=target_decision.value if target_decision else target,
             deploy_root=_mcp_lsp_project_root,
             lock_root=_apm_dir,
             user_scope=scope is InstallScope.USER,
@@ -747,15 +818,20 @@ def _run_dep_update(
                 project_root=_mcp_lsp_project_root,
                 existing_lock=_existing_lock,
                 lock_path=_lock_path,
-                target=target,
+                target_decision=target_decision,
                 diagnostics=getattr(result, "diagnostics", None),
                 logger=logger,
                 verbose=verbose,
             )
+        except RequiredIntegrationError as e:
+            logger.error(str(e))
+            logger.render_summary()
+            sys.exit(1)
         except Exception as e:
-            _rich_error(f"Error reconciling MCP/LSP servers: {e}")
+            logger.error(f"Error reconciling MCP/LSP servers: {e}")
+            logger.render_summary()
             if not verbose:
-                _rich_info("Run with --verbose for detailed diagnostics.")
+                logger.info("Run with --verbose for detailed diagnostics.")
             sys.exit(1)
 
     if plan_state.proceeded:

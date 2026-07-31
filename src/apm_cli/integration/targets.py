@@ -1287,3 +1287,20 @@ def resolve_targets(
         if scoped is not None:
             resolved.append(scoped)
     return resolved
+
+
+def materialize_project_target_profiles(
+    project_root: Path,
+    target_names: list[str] | tuple[str, ...],
+) -> list[TargetProfile]:
+    """Create project target roots and return their canonical profiles."""
+    profiles: list[TargetProfile] = []
+    for target_name in target_names:
+        profile = KNOWN_TARGETS.get(target_name)
+        if profile is None:
+            continue
+        deploy_path = profile.deploy_path(project_root)
+        if not deploy_path.is_dir():
+            deploy_path.mkdir(parents=True, exist_ok=True)
+        profiles.append(profile)
+    return profiles
