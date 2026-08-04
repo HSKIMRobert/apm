@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Required MCP runtime defaults are now overrideable prompts, while secret
+  defaults remain hidden and VS Code OCI launchers resolve every runtime
+  placeholder without writing secret values to `mcp.json`. (#2455)
 - `apm marketplace audit --strict` now fails when a local marketplace source
   is skipped, so CI cannot report success after an incomplete local audit.
   (#2460)

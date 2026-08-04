@@ -1486,6 +1486,18 @@ if [ "$apply_to_normalizer_defs" -ne 1 ] \
     violations=$((violations + 1))
 fi
 
+echo "[*] AC32: MCP runtime argument variable authority"
+mcp_runtime_variable_owner_defs=$(grep -rEc \
+    '^[[:space:]]*def _substitute_runtime_variables\(' \
+    src/apm_cli/adapters/client --include='*.py' \
+    | awk -F: '{sum += $2} END {print sum + 0}')
+if [ "$mcp_runtime_variable_owner_defs" -ne 1 ] \
+    || ! grep -q '^    def _substitute_runtime_variables(' "$mcp_container_owner" \
+    || ! grep -q 'cls\._substitute_runtime_variables(' src/apm_cli/adapters/client/vscode.py; then
+    echo "[x] MCP runtime argument variables must route through MCPClientAdapter"
+    violations=$((violations + 1))
+fi
+
 if [ "$violations" -gt 0 ]; then
     echo "[x] $violations architecture boundary rule(s) failed"
     exit 1
