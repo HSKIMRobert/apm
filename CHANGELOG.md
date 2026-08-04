@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Claude project hooks now run reliably when Claude launches them outside the
+  repository while keeping generated settings portable across clones. (#2408)
 - Marketplace package sources now accept full HTTPS repository URLs with nested
   paths while retaining strict shorthand validation. (#2439)
 - YAML-list `applyTo` entries now preserve every pattern during compilation
