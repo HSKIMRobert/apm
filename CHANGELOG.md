@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `apm marketplace audit --strict` now fails when a local marketplace source
+  is skipped, so CI cannot report success after an incomplete local audit.
+  (#2460)
 - Claude project hooks now run reliably when Claude launches them outside the
   repository while keeping generated settings portable across clones. (#2408)
 - Marketplace package sources now accept full HTTPS repository URLs with nested
