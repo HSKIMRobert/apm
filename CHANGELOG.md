@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Marketplace package sources now accept full HTTPS repository URLs with nested
+  paths while retaining strict shorthand validation. (#2439)
 - YAML-list `applyTo` entries now preserve every pattern during compilation
   and target-native instruction conversion, including explicitly targeted
   supported hidden tool roots. (#2441)
