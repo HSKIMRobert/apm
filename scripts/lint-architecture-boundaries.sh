@@ -1379,6 +1379,11 @@ if ! grep -q '^def validate_tag_pattern(' "$tag_pattern_owner" \
     violations=$((violations + 1))
 fi
 
+echo "[*] AC31: marketplace effective-output-path authority"
+if ! bash scripts/check_marketplace_output_path_authority.sh; then
+    violations=$((violations + 1))
+fi
+
 echo "[*] AC29: dependency identity and materialization path authority"
 identity_owner="src/apm_cli/models/dependency/identity.py"
 materialization_owner="src/apm_cli/models/dependency/materialization.py"
