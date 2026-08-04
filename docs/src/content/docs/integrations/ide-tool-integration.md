@@ -1,6 +1,6 @@
 ---
 title: "IDE & tool integration"
-description: "How APM deploys primitives into VS Code, Claude Code, Cursor, Codex, Gemini, Antigravity, OpenCode, Windsurf, JetBrains and other AI coding clients."
+description: "How APM deploys primitives into VS Code, Claude Code, Cursor, Codex, Gemini, Grok Build, Antigravity, OpenCode, Windsurf, JetBrains and other AI coding clients."
 sidebar:
   order: 3
 ---
@@ -17,6 +17,7 @@ The full slot-by-slot capability table lives in [Targets matrix](../../reference
 |----------------------|--------------------------------------|----------------------------------------|
 | VS Code + Copilot    | `.github/copilot-instructions.md`    | Native instructions, prompts, agents   |
 | Claude Code          | `.claude/`                           | Skills, agents, commands, MCP          |
+| Grok Build           | `.grok/`                             | Rules, agents, commands, skills        |
 | Cursor               | `.cursor/`                           | Rules, commands, MCP                   |
 | Codex CLI            | `.codex/`                            | Skills, MCP                            |
 | Gemini CLI           | `.gemini/` or `GEMINI.md`            | Single-file or distributed             |
