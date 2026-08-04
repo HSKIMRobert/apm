@@ -26,6 +26,52 @@ def test_policy_cache_metadata_redaction_has_single_owner() -> None:
     assert "Policy cache metadata must redact URL credentials at its canonical writer" in guard
 
 
+@pytest.mark.parametrize(
+    ("guard", "replacement"),
+    [
+        ('(directory_path / ".git").is_file()', "False"),
+        ("child_dirs.clear()", "pass"),
+    ],
+)
+def test_nested_worktree_cleanup_guard_rejects_unbounded_agents_scan(
+    tmp_path: Path, guard: str, replacement: str
+) -> None:
+    """The cleanup boundary guard requires detection and pruning."""
+    root = Path(__file__).parents[2]
+    sandbox = tmp_path / "repo"
+    shutil.copytree(
+        root,
+        sandbox,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".venv",
+            ".pytest_cache",
+            "__pycache__",
+            "build",
+            "dist",
+            "node_modules",
+        ),
+    )
+    compiler_path = sandbox / "src/apm_cli/compilation/distributed_compiler.py"
+    source = compiler_path.read_text(encoding="utf-8")
+    compiler_path.write_text(
+        source.replace(guard, replacement, 1),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ("bash", "scripts/lint-architecture-boundaries.sh"),
+        cwd=sandbox,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert result.returncode == 1
+    assert "Nested worktree cleanup must prune .git-file roots" in result.stdout
+
+
 def test_experimental_target_hints_have_single_owner() -> None:
     """Experimental target enable hints must route through one helper."""
     root = Path(__file__).parents[2]
